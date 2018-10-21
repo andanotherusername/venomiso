@@ -1,0 +1,227 @@
+#!/bin/bash -e
+#
+# Installation script for Venom Linux
+#
+
+VENOMINSTALL=$(basename $0)
+ROOT=/mnt/venom
+SYSTEM=/mnt/.boot/system
+DAEMON_LIST="sysklogd dbus lxdm acpid alsa httpd bluetooth cups network gpm
+		networkmanager ntpd sshd rsyncd smartd wpa_supplicant light"
+
+inchrootcmd() {
+	CMD=$@
+	if [ -z $1 ]; then
+		return
+	fi
+
+	pushd $ROOT &>/dev/null
+
+	mount --bind /dev $ROOT/dev
+	mount -t devpts devpts $ROOT/dev/pts -o gid=5,mode=620
+	mount -t proc proc $ROOT/proc
+	mount -t sysfs sysfs $ROOT/sys
+	mount -t tmpfs tmpfs $ROOT/run
+
+	if [ -h $ROOT/dev/shm ]; then
+	  mkdir -p $ROOT/$(readlink $LFS/dev/shm)
+	fi
+
+	chroot "$ROOT" /usr/bin/env -i \
+	HOME=/root \
+	TERM="$TERM" \
+	PS1='\u:\w\$ ' \
+	PATH=/bin:/usr/bin:/sbin:/usr/sbin $CMD
+
+	popd &>/dev/null
+
+	umount $ROOT/dev/pts
+	umount $ROOT/dev
+	umount $ROOT/run
+	umount $ROOT/proc
+	umount $ROOT/sys
+}
+	
+if [ "$UID" != "0" ]; then
+	echo "Venom Linux Installer need to run as root!"
+	exit 1
+fi
+
+clear
+echo "**** Venom Linux Installation Script ****"
+echo
+
+# set hostname
+read -p "Hostname (venom): " NEWHOSTNAME
+[ $NEWHOSTNAME ] || NEWHOSTNAME=venom
+
+# set new username
+read -p "Username (venom): " NEWUSER
+[ $NEWUSER ] || NEWUSER=venom
+
+# set clock
+read -p "Clock in local/utc? (utc): " CLOCK
+[ $CLOCK ] || CLOCK=utc
+
+# set timezone
+read -p "Set your timezone (leave empty to use tzselect): " TIMEZONE
+[ $TIMEZONE ] || TIMEZONE=$(tzselect)
+
+# enable some daemons
+for rcd in $DAEMON_LIST; do
+	[ -x $SYSTEM/etc/rc.d/$rcd ] || continue
+	read -p "Enable daemon '$rcd'? (y/N): " rcds
+	case $rcds in
+		[Yy]|[Yy][Ee][Ss]) daemon+=($rcd) ;;
+	esac
+	rcds=""
+done
+
+# set target partition
+if ! mountpoint -q $ROOT; then
+	read -p "Open 'cfdisk' to partitioning your drive? (y/N): " RUNCFDISK
+	case $RUNCFDISK in
+		[Yy]|[Yy][Ee][Ss]) cfdisk ;;
+	esac
+	
+	read -p "Please set your partition to install (/dev/sdaX): " TARGET
+	[ $TARGET ] || { echo "Partition to install is required! Aborting..."; exit 1; }
+
+	if [[ ! -e $TARGET ]] || [[ ! $(fdisk -l | grep $TARGET) ]]; then
+		echo "Partition '$TARGET' does not exist! Aborting..."; exit 1
+	fi
+
+	read -p "Create filesystem for '$TARGET'? (y/N): " CREATEFS
+	case $CREATEFS in
+		[Yy]|[Yy][Ee][Ss]) CREATEFS=1 ;;
+		*) CREATEFS=0 ;;
+	esac
+	if [ $CREATEFS = 1 ]; then
+		read -p "Set label for partition '$TARGET' (none): " LABEL
+		[ $LABEL ] || LABEL=none
+	fi
+fi
+
+if [ ! $TARGET ]; then
+	TARGET=$(mount | grep $(echo $ROOT | sed 's/\/$//') | awk '{print $1}')
+fi
+
+# swap
+SWAP=$(fdisk -l | grep swap | awk '{print $1}' | head -n1)
+if [[ $SWAP ]]; then
+	read -p "swap partition detected on '$SWAP', add it to fstab? (Y/n): " USESWAP
+	case $USESWAP in
+		[Nn]|[Nn][Oo]) unset SWAP ;;
+	esac
+	if [[ $SWAP ]]; then
+		read -p "Format swap partition on '$SWAP'? (Y/n): " FRMTSWAP
+		case $FRMTSWAP in
+			[Nn]|[Nn][Oo]) unset FRMTSWAP=0 ;;
+			*) FRMTSWAP=1 ;;
+		esac
+	fi
+fi
+
+# grub
+read -p "Install grub? (y/N): " GRUB
+case $GRUB in
+	[Yy]|[Yy][Ee][Ss]) GRUB=1 ;;
+	*) GRUB=0 ;;
+esac
+
+clear
+
+echo "** Installer configuration **"
+echo "Hostname : $NEWHOSTNAME"
+echo "Username : $NEWUSER"
+echo "Clock    : $CLOCK"
+echo "Timezone : $TIMEZONE"
+echo "Daemons  : ${daemon[@]}"
+echo
+echo "********* Partition *********"
+echo "Partition : $TARGET"
+echo "Label     : $LABEL"
+echo "Swap      : $SWAP"
+echo "Grub      : $([ $GRUB = 1 ] && echo yes || echo no)"
+echo
+echo "*****************************"
+echo
+read -p "Continue installation Venom Linux to '$TARGET'? (y/N): " CONTINUEINSTALL
+case $CONTINUEINSTALL in
+	[Yy]|[Yy][Ee][Ss]) echo "Please wait..." ;;
+	*) echo "Installation cancelled..."
+	   exit 2 ;;
+esac
+
+[ $SWAP ] || SWAP="#/dev/sdaX"
+
+if [ $CREATEFS ]; then
+	if [ $LABEL != none ]; then
+		uselabel="-L $LABEL"
+	fi
+	mkfs.ext4 -F $uselabel $TARGET
+fi
+
+if [ $FRMTSWAP = 1 ]; then
+	mkswap $SWAP
+fi 
+
+if ! mountpoint -q $ROOT; then
+	mkdir -p $ROOT
+	mount $TARGET $ROOT
+fi
+
+echo "Calculate files..."
+rsync -av $SYSTEM/ $ROOT/
+
+# rc.conf
+echo "#
+# system configuration
+#
+
+HOSTNAME=\"$NEWHOSTNAME\"
+TIMEZONE=\"$TIMEZONE\"
+CLOCK=\"$CLOCK\"
+FONT=\"\"
+KEYMAP=\"us\"
+DAEMONS=(${daemon[@]})
+" > $ROOT/etc/rc.conf
+
+# fstab
+echo "# Begin /etc/fstab
+
+# file system  mount-point  type     options             dump  fsck
+#                                                              order
+
+$TARGET      /            ext4     defaults            1     1
+$SWAP      swap         swap     pri=1               0     0
+proc           /proc        proc     nosuid,noexec,nodev 0     0
+sysfs          /sys         sysfs    nosuid,noexec,nodev 0     0
+devpts         /dev/pts     devpts   gid=5,mode=620      0     0
+tmpfs          /run         tmpfs    defaults            0     0
+devtmpfs       /dev         devtmpfs mode=0755,nosuid    0     0
+
+# End /etc/fstab" > $ROOT/etc/fstab
+
+#inchrootcmd usermod --login $NEWUSER --move-home --home /home/$NEWUSER nyx
+#inchrootcmd groupmod --new-name $NEWUSER nyx
+
+echo "Adding '$NEWUSER' user..."
+inchrootcmd useradd -m -G users,wheel,audio,video -s /bin/bash $NEWUSER
+echo "Set password for '$NEWUSER'..."
+inchrootcmd passwd $NEWUSER
+
+echo "Set password for 'root'..."
+inchrootcmd passwd
+
+echo "Installing grub..."
+[ $GRUB = 1 ] && inchrootcmd grub-install /dev/sda && inchrootcmd grub-mkconfig -o /boot/grub/grub.cfg
+
+umount $ROOT
+
+clear
+echo "************************************************"
+echo "*  Venom Linux installation process completed  *"
+echo "*             you can reboot now :)            *"
+echo "************************************************"
+
