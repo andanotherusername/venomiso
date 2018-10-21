@@ -1,0 +1,4 @@
+initrd*
+vmlinuz*
+*.sfs*
+*.iso

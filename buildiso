@@ -96,7 +96,6 @@ if [ ! -e $SFSDIR/root.sfs ]; then
 			-e $DISTRODIR/exclude \
 			-e $DISTRODIR/var/cache/scratchpkg/sources/* \
 			-e $DISTRODIR/var/cache/scratchpkg/packages/* \
-			-e $DISTRODIR/var/cache/scratchpkg/work/* \
 			-e $DISTRODIR/tmp/*
 	fi
 fi
