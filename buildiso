@@ -1,0 +1,109 @@
+#!/bin/bash -e
+
+DISTRONAME="Venom"
+DISTRODIR=$1
+CWD=$(pwd)
+BOOTFILESDIR=$CWD/bootfiles
+INITRD=$BOOTFILESDIR/initrd
+OVERLAYDIR=$CWD/virootfs
+SFSDIR=$CWD/filesystem
+TMPDIR=$(mktemp -d)
+
+LABEL=VenomLinuxLive
+ISO=Venom-1.0.iso
+
+prepareisolinux() {
+	mkdir -p $TMPDIR/live/{filesystem,isolinux}
+	cp $BOOTFILESDIR/* $TMPDIR/live/isolinux
+	echo "$DISTRONAME" > $TMPDIR/live/isolinux/venomlive
+	cp $SFSDIR/root.sfs $TMPDIR/live/filesystem
+	[ -d $OVERLAYDIR ] && cp -aR $OVERLAYDIR $TMPDIR/live/
+}
+
+build_iso() {
+	rm -f $ISO
+	xorriso -as mkisofs \
+		-r -J -joliet-long \
+		-l -cache-inodes \
+		-isohybrid-mbr $CWD/bootfiles/isohdpfx.bin \
+		-partition_offset 16 \
+		-A "$LABEL" \
+		-V "$LABEL" \
+		-b isolinux/isolinux.bin \
+		-c isolinux/boot.cat \
+		-no-emul-boot \
+		-boot-load-size 4 \
+		-boot-info-table \
+		-o $ISO \
+		$TMPDIR/live
+}
+
+cleartmpdir() {
+	rm -fr $TMPDIR
+}
+
+trap "cleartmpdir" SIGHUP SIGINT SIGQUIT SIGTERM
+
+echo "Creating $ISO"
+
+# kernel
+if [ ! -e $BOOTFILESDIR/vmlinuz ]; then
+	if [ "$DISTRODIR" = "" ]; then
+		echo "ERROR: run '$(basename $0) <distro path>' to copy over kernel and initramfs"
+		exit 1
+	fi
+	if [ -f $DISTRODIR/boot/vmlinuz-venom ]; then
+		echo " copying kernel..."
+		cp $DISTRODIR/boot/vmlinuz-venom $BOOTFILESDIR/vmlinuz
+	else
+		echo "kernel (vmlinuz) not exist!"
+		exit 1
+	fi
+fi
+
+# initrd
+if [ ! -e $BOOTFILESDIR/initrd ]; then
+	if [ "$DISTRODIR" = "" ]; then
+		echo "ERROR: run '$(basename $0) <distro path>' to copy over kernel and initramfs"
+		exit 1
+	fi
+	if [ -f $DISTRODIR/boot/initrd-venom.img ]; then
+		echo " copying kernel..."
+		cp $DISTRODIR/boot/initrd-venom.img $BOOTFILESDIR/initrd
+	else
+		echo "initramfs image (initrd) not exist!"
+		exit 1
+	fi
+fi
+
+# root.sfs
+if [ ! -e $SFSDIR/root.sfs ]; then
+	if [ "$UID" != 0 ]; then
+		echo "ERROR: you need root access to create root.sfs"
+		exit 1
+	fi
+	if [ "$DISTRODIR" = "" ]; then
+		echo "ERROR: run '$(basename $0) <distro path>' to create root.sfs"
+		exit 1
+	fi
+	if [ ! -d $DISTRODIR ]; then
+		echo "ERROR: distro directory '$DISTRODIR' does not exist"
+		exit 1
+	else
+		echo " creating root.sfs"
+		mksquashfs $DISTRODIR $SFSDIR/root.sfs \
+			-b 1048576 -comp xz -Xdict-size 100% \
+			-e $DISTRODIR/exclude \
+			-e $DISTRODIR/var/cache/scratchpkg/sources/* \
+			-e $DISTRODIR/var/cache/scratchpkg/packages/* \
+			-e $DISTRODIR/var/cache/scratchpkg/work/* \
+			-e $DISTRODIR/tmp/*
+	fi
+fi
+
+prepareisolinux
+build_iso
+cleartmpdir
+echo done
+
+exit 0
