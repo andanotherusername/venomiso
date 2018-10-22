@@ -1,0 +1,153 @@
+#!/bin/bash -e
+
+trap "cleartmpdir" SIGHUP SIGINT SIGQUIT SIGTERM
+
+cleartmpdir() {
+	rm -fr $VENOMISODIR
+}
+
+msg() {
+	echo ":: $@"
+}
+					
+prepareisolinux() {
+	msg "preparing isolinux files"
+	mkdir -p $VENOMISO/{filesystem,isolinux}
+	cp $BOOTFILESDIR/* $VENOMISO/isolinux
+	echo "$DISTRONAME" > $VENOMISO/isolinux/venomlive
+	cp $VENOMROOTSFS $VENOMISO/filesystem
+	[ -d $OVERLAYDIR ] && cp -aR $OVERLAYDIR $VENOMISO
+}
+
+build_iso() {
+	prepareisolinux
+	prepare_bootfiles
+	rm -f $ISO
+	msg "making iso"
+	xorriso -as mkisofs \
+		-r -J -joliet-long \
+		-l -cache-inodes \
+		-isohybrid-mbr $CWD/bootfiles/isohdpfx.bin \
+		-partition_offset 16 \
+		-A "$LABEL" \
+		-V "$LABEL" \
+		-b isolinux/isolinux.bin \
+		-c isolinux/boot.cat \
+		-no-emul-boot \
+		-boot-load-size 4 \
+		-boot-info-table \
+		-o $ISO \
+		$VENOMISO
+}
+
+prepare_bootfiles() {
+	# kernel
+	if [ -f $VENOMROOTFS/boot/vmlinuz-venom ]; then
+		msg "copying kernel..."
+		cp $VENOMROOTFS/boot/vmlinuz-venom $BOOTFILESDIR/vmlinuz
+	else
+		msg "kernel (vmlinuz-venom) not exist!"
+		exit 1
+	fi
+
+	# initrd
+	if [ -f $VENOMROOTFS/boot/initrd-venom.img ]; then
+		msg "copying initramfs..."
+		cp $VENOMROOTFS/boot/initrd-venom.img $BOOTFILESDIR/initrd
+	else
+		msg "initramfs image (initrd) not exist!"
+		exit 1
+	fi
+}
+
+extract_rootfs() {
+	if [ ! -f $ROOTFS ]; then
+		msg "ERROR: venom rootfs not exist."
+		exit 1
+	fi
+	mkdir -p $VENOMROOTFS
+	msg "extract $ROOTFS"
+	tar xJpf $ROOTFS -C $VENOMROOTFS
+	if [ $? != 0 ]; then
+		msg "ERROR: error extracting $ROOTFS."
+		exit 1
+	fi
+}
+
+make_rootsfs() {
+	msg "making root.sfs"
+	rm -f $CWD/root.sfs
+	mksquashfs $VENOMROOTFS $VENOMROOTSFS \
+		-b 1048576 -comp xz -Xdict-size 100% \
+		-e $VENOMROOTFS/var/cache/scratchpkg/sources/* \
+		-e $VENOMROOTFS/var/cache/scratchpkg/packages/* \
+		-e $VENOMROOTFS/tmp/*
+}
+
+main() {
+	parseopt "$@"
+	
+	cleartmpdir
+	
+	if [ $ROOTFS ]; then
+		extract_rootfs
+		make_rootsfs
+	elif [ $ROOTDIR ]; then
+		VENOMROOTFS=$ROOTDIR
+		make_rootsfs
+	elif [ $ROOTSFS ]; then
+		VENOMROOTSFS=$ROOTSFS
+		mkdir -p $VENOMROOTFS
+		unsquashfs -f -d $VENOMROOTFS $VENOMROOTSFS /boot/vmlinuz-venom /boot/initrd-venom.img
+	else
+		echo "ERROR: rootfs / rootdir / rootsfs is not set."
+		exit 1
+	fi
+	build_iso
+	cleartmpdir
+}
+
+parseopt() {
+	while [ "$1" ]; do
+		case $1 in
+			--rootsfs)	if [ ! $2 ]; then
+							echo "ERROR: option '$1' requires an argument."
+							exit 1
+						fi
+						ROOTSFS=$2
+						shift ;;
+			--rootfs)	if [ ! $2 ]; then
+							echo "ERROR: option '$1' requires an argument."
+							exit 1
+						fi
+						ROOTFS=$2
+						shift ;;
+			--rootdir)	if [ ! $2 ]; then
+							echo "ERROR: option '$1' requires an argument."
+							exit 1
+						fi
+						ROOTDIR=$2
+						shift ;;
+			*)			echo "ERROR: invalid option '$1'"
+						exit 1 ;;
+		esac
+		shift
+	done
+}
+
+DISTRONAME="Venom"
+CWD=$(pwd)
+BOOTFILESDIR=$CWD/bootfiles
+OVERLAYDIR=$CWD/virootfs
+
+VENOMISODIR=/tmp/venomiso
+VENOMROOTFS=$VENOMISODIR/venom-rootfs
+VENOMISO=$VENOMISODIR/venom-iso
+VENOMROOTSFS=$CWD/root.sfs
+
+LABEL=VenomLinuxLive
+ISO=Venom-1.0.iso
+
+main "$@"
+
+exit 0
