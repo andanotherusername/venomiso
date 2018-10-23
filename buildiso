@@ -19,7 +19,7 @@ msg() {
 prepareisolinux() {
 	msg "preparing isolinux files"
 	mkdir -p $VENOMISO/{filesystem,isolinux,boot}
-	cp $BOOTFILESDIR/* $VENOMISO/isolinux
+	cp $ISOLINUXDIR/* $VENOMISO/isolinux
 	echo "$DISTRONAME" > $VENOMISO/isolinux/venomlive
 	cp $VENOMROOTSFS $VENOMISO/filesystem/root.sfs
 	[ -d $OVERLAYDIR ] && cp -aR $OVERLAYDIR $VENOMISO
@@ -33,7 +33,7 @@ build_iso() {
 	xorriso -as mkisofs \
 		-r -J -joliet-long \
 		-l -cache-inodes \
-		-isohybrid-mbr $CWD/bootfiles/isohdpfx.bin \
+		-isohybrid-mbr $CWD/isolinux/isohdpfx.bin \
 		-partition_offset 16 \
 		-A "$LABEL" \
 		-V "$LABEL" \
@@ -140,8 +140,9 @@ parseopt() {
 
 DISTRONAME="Venom"
 CWD=$(pwd)
-BOOTFILESDIR=$CWD/bootfiles
+ISOLINUXDIR=$CWD/isolinux
 OVERLAYDIR=$CWD/virootfs
+DATE=$(date +"%Y%m%d")
 
 VENOMISODIR=/tmp/venomiso
 VENOMROOTFS=$VENOMISODIR/venom-rootfs
@@ -149,7 +150,7 @@ VENOMISO=$VENOMISODIR/venom-iso
 VENOMROOTSFS=$CWD/root.sfs
 
 LABEL=VenomLinuxLive
-OUTPUT=Venom-1.0.iso
+OUTPUT=venom-x86_64-$DATE.iso
 
 main "$@"
 

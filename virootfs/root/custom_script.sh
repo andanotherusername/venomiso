@@ -13,7 +13,7 @@ echo "$USER:$PASSWORD" | chpasswd -c SHA512
 #chmod -R 775 /home/$USER/.config
 
 sed 's/#\(en_US\.UTF-8\)/\1/' -i /etc/locales
-genlocales
+genlocales &>/dev/null
 
 if [ $(type -p startxfce4) ]; then
 	SSN=$(type -p startxfce4)
