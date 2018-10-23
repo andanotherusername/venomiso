@@ -1,27 +1,35 @@
 #!/bin/bash -e
 
-DISTRONAME="Venom"
-DISTRODIR=$1
-CWD=$(pwd)
-BOOTFILESDIR=$CWD/bootfiles
-INITRD=$BOOTFILESDIR/initrd
-OVERLAYDIR=$CWD/virootfs
-SFSDIR=$CWD/filesystem
-TMPDIR=$(mktemp -d)
+trap "cleartmpdir" SIGHUP SIGINT SIGQUIT SIGTERM
 
-LABEL=VenomLinuxLive
-ISO=Venom-1.0.iso
+cleartmpdir() {
+	rm -fr $VENOMISODIR
+}
 
+die() {
+	echo "!! Error occurs !!"
+	cleartmpdir
+	exit 1
+}
+
+msg() {
+	echo ":: $@"
+}
+					
 prepareisolinux() {
-	mkdir -p $TMPDIR/live/{filesystem,isolinux}
-	cp $BOOTFILESDIR/* $TMPDIR/live/isolinux
-	echo "$DISTRONAME" > $TMPDIR/live/isolinux/venomlive
-	cp $SFSDIR/root.sfs $TMPDIR/live/filesystem
-	[ -d $OVERLAYDIR ] && cp -aR $OVERLAYDIR $TMPDIR/live/
+	msg "preparing isolinux files"
+	mkdir -p $VENOMISO/{filesystem,isolinux,boot}
+	cp $BOOTFILESDIR/* $VENOMISO/isolinux
+	echo "$DISTRONAME" > $VENOMISO/isolinux/venomlive
+	cp $VENOMROOTSFS $VENOMISO/filesystem/root.sfs
+	[ -d $OVERLAYDIR ] && cp -aR $OVERLAYDIR $VENOMISO
 }
 
 build_iso() {
-	rm -f $ISO
+	prepareisolinux
+	prepare_bootfiles
+	rm -f $OUTPUT
+	msg "making iso"
 	xorriso -as mkisofs \
 		-r -J -joliet-long \
 		-l -cache-inodes \
@@ -34,75 +42,115 @@ build_iso() {
 		-no-emul-boot \
 		-boot-load-size 4 \
 		-boot-info-table \
-		-o $ISO \
-		$TMPDIR/live
+		-o $OUTPUT \
+		$VENOMISO
 }
 
-cleartmpdir() {
-	rm -fr $TMPDIR
+prepare_bootfiles() {
+	# kernel
+	if [ -f $VENOMROOTFS/boot/vmlinuz-venom ]; then
+		msg "copying kernel..."
+		cp $VENOMROOTFS/boot/vmlinuz-venom $VENOMISO/boot/vmlinuz
+	else
+		msg "kernel (vmlinuz-venom) not exist!"
+		exit 1
+	fi
+
+	# initrd
+	if [ -f $VENOMROOTFS/boot/initrd-venom.img ]; then
+		msg "copying initramfs..."
+		cp $VENOMROOTFS/boot/initrd-venom.img $VENOMISO/boot/initrd
+	else
+		msg "initramfs image (initrd) not exist!"
+		exit 1
+	fi
 }
 
-trap "cleartmpdir" SIGHUP SIGINT SIGQUIT SIGTERM
-
-echo "Creating $ISO"
-
-# kernel
-if [ ! -e $BOOTFILESDIR/vmlinuz ]; then
-	if [ "$DISTRODIR" = "" ]; then
-		echo "ERROR: run '$(basename $0) <distro path>' to copy over kernel and initramfs"
+extract_rootfs() {
+	if [ ! -f $ROOTFS ]; then
+		msg "ERROR: venom rootfs not exist."
 		exit 1
 	fi
-	if [ -f $DISTRODIR/boot/vmlinuz-venom ]; then
-		echo " copying kernel..."
-		cp $DISTRODIR/boot/vmlinuz-venom $BOOTFILESDIR/vmlinuz
+	mkdir -p $VENOMROOTFS
+	msg "extract $ROOTFS"
+	tar xJpf $ROOTFS -C $VENOMROOTFS
+	if [ $? != 0 ]; then
+		msg "ERROR: error extracting $ROOTFS."
+		exit 1
+	fi
+}
+
+make_rootsfs() {
+	msg "making root.sfs"
+	rm -f $CWD/root.sfs
+	mksquashfs $VENOMROOTFS $VENOMROOTSFS \
+		-b 1048576 -comp xz -Xdict-size 100% \
+		-e $VENOMROOTFS/var/cache/scratchpkg/sources/* \
+		-e $VENOMROOTFS/var/cache/scratchpkg/packages/* \
+		-e $VENOMROOTFS/tmp/*
+}
+
+main() {
+	parseopt "$@"
+	
+	cleartmpdir
+	
+	if [ "$SRCTYPE" = "image" ]; then
+		ROOTFS=$SRC
+		extract_rootfs
+		make_rootsfs
+	elif [ "$SRCTYPE" = "dir" ]; then
+		VENOMROOTFS=$SRC
+		make_rootsfs
+	elif [ "$SRCTYPE" = "sfs" ]; then
+		VENOMROOTSFS=$SRC
+		mkdir -p $VENOMROOTFS
+		unsquashfs -f -d $VENOMROOTFS $VENOMROOTSFS /boot/vmlinuz-venom /boot/initrd-venom.img || die
 	else
-		echo "kernel (vmlinuz) not exist!"
+		echo "ERROR: source is not set."
 		exit 1
 	fi
-fi
+	build_iso
+	cleartmpdir
+}
 
-# initrd
-if [ ! -e $BOOTFILESDIR/initrd ]; then
-	if [ "$DISTRODIR" = "" ]; then
-		echo "ERROR: run '$(basename $0) <distro path>' to copy over kernel and initramfs"
-		exit 1
-	fi
-	if [ -f $DISTRODIR/boot/initrd-venom.img ]; then
-		echo " copying kernel..."
-		cp $DISTRODIR/boot/initrd-venom.img $BOOTFILESDIR/initrd
-	else
-		echo "initramfs image (initrd) not exist!"
-		exit 1
-	fi
-fi
+parseopt() {
+	while [ "$1" ]; do
+		case $1 in
+			-o|--output)	if [ ! $2 ]; then
+								echo "ERROR: option '$1' requires an argument."
+								exit 1
+							fi
+							OUTPUT=$2
+							shift ;;
+				*)			if [ "$SRC" ]; then
+								echo "ERROR: invalid option '$1'"
+								exit 1
+							fi
+							case $1 in
+								*.txz) SRCTYPE=image ;;
+								*.sfs) SRCTYPE=sfs ;;
+								*)     SRCTYPE=dir ;;
+							esac
+							SRC=$1 ;;
+		esac
+		shift
+	done
+}
 
-# root.sfs
-if [ ! -e $SFSDIR/root.sfs ]; then
-	if [ "$UID" != 0 ]; then
-		echo "ERROR: you need root access to create root.sfs"
-		exit 1
-	fi
-	if [ "$DISTRODIR" = "" ]; then
-		echo "ERROR: run '$(basename $0) <distro path>' to create root.sfs"
-		exit 1
-	fi
-	if [ ! -d $DISTRODIR ]; then
-		echo "ERROR: distro directory '$DISTRODIR' does not exist"
-		exit 1
-	else
-		echo " creating root.sfs"
-		mksquashfs $DISTRODIR $SFSDIR/root.sfs \
-			-b 1048576 -comp xz -Xdict-size 100% \
-			-e $DISTRODIR/exclude \
-			-e $DISTRODIR/var/cache/scratchpkg/sources/* \
-			-e $DISTRODIR/var/cache/scratchpkg/packages/* \
-			-e $DISTRODIR/tmp/*
-	fi
-fi
+DISTRONAME="Venom"
+CWD=$(pwd)
+BOOTFILESDIR=$CWD/bootfiles
+OVERLAYDIR=$CWD/virootfs
 
-prepareisolinux
-build_iso
-cleartmpdir
-echo done
+VENOMISODIR=/tmp/venomiso
+VENOMROOTFS=$VENOMISODIR/venom-rootfs
+VENOMISO=$VENOMISODIR/venom-iso
+VENOMROOTSFS=$CWD/root.sfs
+
+LABEL=VenomLinuxLive
+OUTPUT=Venom-1.0.iso
+
+main "$@"
 
 exit 0
