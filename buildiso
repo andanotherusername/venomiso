@@ -98,9 +98,13 @@ main() {
 	if [ "$SRCTYPE" = "image" ]; then
 		ROOTFS=$SRC
 		extract_rootfs
+		#chroot_run scratch sync
+		#chroot_run scratch sysup --no-confirm
 		make_rootsfs
 	elif [ "$SRCTYPE" = "dir" ]; then
 		VENOMROOTFS=$SRC
+		#chroot_run scratch sync
+		#chroot_run scratch sysup --no-confirm
 		make_rootsfs
 	elif [ "$SRCTYPE" = "sfs" ]; then
 		VENOMROOTSFS=$SRC
@@ -112,6 +116,28 @@ main() {
 	fi
 	build_iso
 	cleartmpdir
+}
+
+chroot_run() {
+	mount_pseudofs
+	chroot $VENOMROOTFS $@
+	umount_pseudofs
+}
+
+mount_pseudofs() {
+	mount --bind /dev $VENOMROOTFS/dev
+	mount -t devpts devpts $VENOMROOTFS/dev/pts -o gid=5,mode=620
+	mount -t proc proc $VENOMROOTFS/proc
+	mount -t sysfs sysfs $VENOMROOTFS/sys
+	mount -t tmpfs tmpfs $VENOMROOTFS/run
+}
+
+umount_pseudofs() {
+	umount $VENOMROOTFS/dev/pts
+	umount $VENOMROOTFS/dev
+	umount $VENOMROOTFS/run
+	umount $VENOMROOTFS/proc
+	umount $VENOMROOTFS/sys
 }
 
 parseopt() {
