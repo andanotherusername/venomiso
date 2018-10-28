@@ -1,227 +1,407 @@
-#!/bin/bash -e
-#
-# Installation script for Venom Linux
-#
+#!/bin/bash
 
-VENOMINSTALL=$(basename $0)
-ROOT=/mnt/venom
-SYSTEM=/mnt/.boot/system
-DAEMON_LIST="sysklogd dbus lxdm acpid alsa httpd bluetooth cups network gpm
-		networkmanager ntpd sshd rsyncd smartd wpa_supplicant light"
+BACKTITLE="Venom Linux Installation"
 
-inchrootcmd() {
-	CMD=$@
-	if [ -z $1 ]; then
+DEFSIZE="10 50 0"
+YESNOSIZE="8 50"
+WIDTH=70
+HEIGHT=10
+
+VENOMROOT="/mnt/venom"
+ROOTSFS="root.sfs"
+
+_dialog() {
+	dialog --no-mouse "$@" 3>&1 1>&2 2>&3
+	return $?
+}
+
+print_msg() {
+	_dialog --msgbox "$@" 8 60
+}
+
+_exit() {
+	local exits
+	_dialog --yesno "Exit installation?" 8 50
+	if [ $? = 0 ]; then
+		clear
+		exit 0
+	fi
+}
+
+menu_keymap() {
+	local _keymaps="$(find /usr/share/keymaps/ -type f -iname "*.map.gz" -printf "%f\n" | sed 's|.map.gz||g' | sort)"
+	local _KEYMAPS=
+	
+	for f in ${_keymaps}; do
+        _KEYMAPS="${_KEYMAPS} ${f} -"
+	done
+	keymap_var=$(_dialog --menu "Select your keymap" 0 50 0 ${_KEYMAPS})
+
+}
+
+menu_timezone() {
+	local _tzones="$(cd /usr/share/zoneinfo; find Africa/ America/ Antarctica/ Arctic/ Asia/ Atlantic/ Australia/ Europe/ Indian/ Pacific/ posix/ -type f | sort)"
+    local _TIMEZONES=
+
+    for f in ${_tzones}; do
+        _TIMEZONES="${_TIMEZONES} ${f} -"
+    done
+	timezone_var=$(_dialog --menu "Select your timezone" 0 40 0 ${_TIMEZONES})
+
+}
+
+menu_hostname() {
+	local _preset
+	if [ -z $hostname_var ]; then
+		_preset=venom
+	else
+		_preset=$hostname_var
+	fi
+	hostname_var=$(_dialog --inputbox "Enter hostname:" 0 50 $_preset)
+}
+
+menu_rootpasswd() {
+	while true; do
+		rootpasswd=$(_dialog --insecure --passwordbox "Enter password for root:" 0 50)
+		if [ $? != 0 ]; then
+			break
+		fi
+		rootpasswdc=$(_dialog --insecure --passwordbox "Enter password confirmation for root:" 0 50)
+		if [ $? != 0 ]; then
+			break
+		fi
+		if [ -z $rootpasswd ]; then
+			_dialog --infobox "Password cant empty, try again!" 3 40
+			sleep 2
+		elif [ $rootpasswd != $rootpasswdc ]; then
+			_dialog --infobox "Password does not match, try again!" 3 40
+			sleep 2
+		else
+			break
+		fi
+	done
+}
+
+menu_useraccount() {
+	local _preset
+	if [ -z $user_var ]; then
+		_preset=venom
+	else
+		_preset=$user_var
+	fi
+	user_var=$(_dialog --inputbox "Enter login name:" 0 50 $_preset)
+	if [ $? = 0 ]; then
+		while true; do
+			passwd=$(_dialog --insecure --passwordbox "Enter password for $user_var:" 0 50)
+			if [ $? != 0 ]; then
+				break
+			fi
+			passwdc=$(_dialog --insecure --passwordbox "Enter password confirmation for $user_var:" 0 50)
+			if [ $? != 0 ]; then
+				break
+			fi
+			if [ -z $passwd ]; then
+				_dialog --infobox "Password cant empty, try again!" 3 40
+				sleep 2
+			elif [ $passwd != $passwdc ]; then
+				_dialog --infobox "Password does not match, try again!" 3 40
+				sleep 2
+			else
+				break
+			fi
+		done
+	else
 		return
 	fi
-
-	pushd $ROOT &>/dev/null
-
-	mount --bind /dev $ROOT/dev
-	mount -t devpts devpts $ROOT/dev/pts -o gid=5,mode=620
-	mount -t proc proc $ROOT/proc
-	mount -t sysfs sysfs $ROOT/sys
-	mount -t tmpfs tmpfs $ROOT/run
-
-	if [ -h $ROOT/dev/shm ]; then
-	  mkdir -p $ROOT/$(readlink $LFS/dev/shm)
-	fi
-
-	chroot "$ROOT" /usr/bin/env -i \
-	HOME=/root \
-	TERM="$TERM" \
-	PS1='\u:\w\$ ' \
-	PATH=/bin:/usr/bin:/sbin:/usr/sbin $CMD
-
-	popd &>/dev/null
-
-	umount $ROOT/dev/pts
-	umount $ROOT/dev
-	umount $ROOT/run
-	umount $ROOT/proc
-	umount $ROOT/sys
 }
+
+showdisk() {
+	local disk
+	disk=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w disk | awk '{print $1}')
+	echo $disk
+}
+
+showpartition() {
+	local part
+	part=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w part | awk '{print $1}')
+	echo $part
+}
+
+menu_partition() {
+	local dsize
+	local dd
+	local partmenu
 	
-if [ "$UID" != "0" ]; then
-	echo "Venom Linux Installer need to run as root!"
-	exit 1
-fi
-
-clear
-echo "**** Venom Linux Installation Script ****"
-echo
-
-# set hostname
-read -p "Hostname (venom): " NEWHOSTNAME
-[ $NEWHOSTNAME ] || NEWHOSTNAME=venom
-
-# set new username
-read -p "Username (venom): " NEWUSER
-[ $NEWUSER ] || NEWUSER=venom
-
-# set clock
-read -p "Clock in local/utc? (utc): " CLOCK
-[ $CLOCK ] || CLOCK=utc
-
-# set timezone
-read -p "Set your timezone (leave empty to use tzselect): " TIMEZONE
-[ $TIMEZONE ] || TIMEZONE=$(tzselect)
-
-# enable some daemons
-for rcd in $DAEMON_LIST; do
-	[ -x $SYSTEM/etc/rc.d/$rcd ] || continue
-	read -p "Enable daemon '$rcd'? (y/N): " rcds
-	case $rcds in
-		[Yy]|[Yy][Ee][Ss]) daemon+=($rcd) ;;
-	esac
-	rcds=""
-done
-
-# set target partition
-if ! mountpoint -q $ROOT; then
-	read -p "Open 'cfdisk' to partitioning your drive? (y/N): " RUNCFDISK
-	case $RUNCFDISK in
-		[Yy]|[Yy][Ee][Ss]) cfdisk ;;
-	esac
+	_dialog --yesno "Run cfdisk to partition disk?" $YESNOSIZE
+	if [ $? = 0 ]; then
+		for d in $(showdisk); do
+			dsize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep $d | grep -w disk | awk '{print $2}')
+			dd="$dd $d $dsize"
+		done
+		cfdisk_part=$(_dialog --menu "Choose disk to modify partition" 0 50 0 ${dd})
+		[ $? = 0 ] || return
+		cfdisk $cfdisk_part
+	fi
 	
-	read -p "Please set your partition to install (/dev/sdaX): " TARGET
-	[ $TARGET ] || { echo "Partition to install is required! Aborting..."; exit 1; }
-
-	if [[ ! -e $TARGET ]] || [[ ! $(fdisk -l | grep $TARGET) ]]; then
-		echo "Partition '$TARGET' does not exist! Aborting..."; exit 1
+	# select partition to install venom
+	for p in $(showpartition); do
+		psize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $p | awk '{print $2}')
+		partmenu="$partmenu $p $psize"
+	done
+	partition_var=$(_dialog --menu "Choose partition to install Venom" 0 50 0 ${partmenu})
+	[ $? = 0 ] || return
+	
+	# select filesystem type
+	_dialog --yesno "Do you want to format $partition_var?" $YESNOSIZE
+	if [ $? = 0 ]; then
+		filesystem_var=$(_dialog --menu "Select filesystem for $partition_var" 0 70 0 \
+			ext4 "Next generation of Ext3 file system" \
+			ext3 "Journaling version of Ext2 file system" \
+			ext2 "Standard file system Ext2" \
+			btrfs "New promising file system" \
+			reiserfs "Very stable file system but not maintain anymore" \
+			xfs "High performance journaling file system create by SGI")
+		[ $? = 0 ] || return
 	fi
+	
+	swap_dev=$(fdisk -l -o device,type | grep swap | cut -d " " -f1 | head -n1)
+	if [ -n $swap_dev ]; then
+		_dialog --yesno "Swap partition found in $swap_dev, do you want to format it?" $YESNOSIZE
+		if [ $? = 0 ]; then
+			format_swap=1
+		else
+			if [ "$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $swap_dev | grep -w swap)" ]; then
+				swap_ok=1
+			fi
+		fi
+		if [ "$format_swap" = 1 ] || [ "$swap_ok" = 1 ]; then
+			_dialog --yesno "Add swap partition ($swap_dev) to fstab?" $YESNOSIZE
+			if [ $? = 0 ]; then
+				add_swap=1
+			fi
+		fi
+	fi		
+}
 
-	read -p "Create filesystem for '$TARGET'? (y/N): " CREATEFS
-	case $CREATEFS in
-		[Yy]|[Yy][Ee][Ss]) CREATEFS=1 ;;
-		*) CREATEFS=0 ;;
-	esac
-	if [ $CREATEFS = 1 ]; then
-		read -p "Set label for partition '$TARGET' (none): " LABEL
-		[ $LABEL ] || LABEL=none
+menu_bootloader() {
+	local d
+	local dd
+	local dsize
+	
+	_dialog --yesno "Do you want install grub bootloader?" $YESNOSIZE
+	if [ $? = 0 ]; then
+		for d in $(showdisk); do
+			dsize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep $d | grep -w disk | awk '{print $2}')
+			dd="$dd $d $dsize"
+		done
+		grub_var=$(_dialog --menu "Choose disk to install grub" $DEFSIZE ${dd})
+		[ $? = 0 ] || return
+	else
+		grub_var=SKIP
 	fi
-fi
+}
 
-if [ ! $TARGET ]; then
-	TARGET=$(mount | grep $(echo $ROOT | sed 's/\/$//') | awk '{print $1}')
-fi
+view_settings() {
+	_dialog --title "Saved settings for installation" --msgbox "
+Keymap    : $keymap_var
+Timezone  : $timezone_var
+Hostname  : $hostname_var
+User      : $user_var
+UserPasswd: $([ $passwd ] && echo -done-)
+Rootpswd  : $([ $rootpasswd ] && echo -done-)
+Partition : $partition_var
+Swap      : $swap_dev
+Grub      : $grub_var
+" 0 0
+}
 
-# swap
-SWAP=$(fdisk -l | grep swap | awk '{print $1}' | head -n1)
-if [[ $SWAP ]]; then
-	read -p "swap partition detected on '$SWAP', add it to fstab? (Y/n): " USESWAP
-	case $USESWAP in
-		[Nn]|[Nn][Oo]) unset SWAP ;;
-	esac
-	if [[ $SWAP ]]; then
-		read -p "Format swap partition on '$SWAP'? (Y/n): " FRMTSWAP
-		case $FRMTSWAP in
-			[Nn]|[Nn][Oo]) unset FRMTSWAP=0 ;;
-			*) FRMTSWAP=1 ;;
+install_now() {
+	local notset
+	
+	[ -z $keymap_var ] && notset="Keyboard"
+	[ -z $partition_var ] && notset="$notset Partition"
+	[ -z $timezone_var ] && notset="$notset Timezone"
+	[ -z $hostname_var ] && notset="$notset Hostname"
+	[ -z $user_var ] && notset="$notset UserAccount"
+	[ -z $rootpasswd ] && notset="$notset RootPassword"
+	[ -z $grub_var ] && notset="$notset Bootloader"
+	
+	if [ "$notset" ]; then
+		notset=$(echo $notset | tr ' ' '\n')
+		_dialog --title "This options is not set" --msgbox "$notset" 0 0
+		return
+	fi
+	
+	_dialog --yesno "Continue with installation?" $YESNOSIZE
+	
+	# format partition
+	if [ $filesystem_var ]; then
+		_dialog --infobox "Formatting partition $partition_var to $filesystem_var" 3 50
+		case $filesystem_var in
+			ext4) mkfs.ext4 -F $partition_var &>/dev/null ;;
+			ext3) mkfs.ext3 -F $partition_var &>/dev/null ;;
+			ext2) mkfs.ext2 -F $partition_var &>/dev/null ;;
+			xfs) mkfs.xfs -f -m crc=0 $partition_var &>/dev/null ;;
+			reiserfs) mkreiserfs -q $partition_var &>/dev/null ;;
+			btrfs) mkfs.btrfs -f $partition_var &>/dev/null ;;
 		esac
 	fi
-fi
-
-# grub
-read -p "Install grub? (y/N): " GRUB
-case $GRUB in
-	[Yy]|[Yy][Ee][Ss]) GRUB=1 ;;
-	*) GRUB=0 ;;
-esac
-
-clear
-
-echo "** Installer configuration **"
-echo "Hostname : $NEWHOSTNAME"
-echo "Username : $NEWUSER"
-echo "Clock    : $CLOCK"
-echo "Timezone : $TIMEZONE"
-echo "Daemons  : ${daemon[@]}"
-echo
-echo "********* Partition *********"
-echo "Partition : $TARGET"
-echo "Label     : $LABEL"
-echo "Swap      : $SWAP"
-echo "Grub      : $([ $GRUB = 1 ] && echo yes || echo no)"
-echo
-echo "*****************************"
-echo
-read -p "Continue installation Venom Linux to '$TARGET'? (y/N): " CONTINUEINSTALL
-case $CONTINUEINSTALL in
-	[Yy]|[Yy][Ee][Ss]) echo "Please wait..." ;;
-	*) echo "Installation cancelled..."
-	   exit 2 ;;
-esac
-
-[ $SWAP ] || SWAP="#/dev/sdaX"
-
-if [ $CREATEFS ]; then
-	if [ $LABEL != none ]; then
-		uselabel="-L $LABEL"
+	
+	# make swap
+	if [ "$format_swap" = 1 ] && [ "$swap_dev" ]; then
+		_dialog --infobox "Formatting partition $swap_dev to swap" 3 50
+		mkswap $swap_dev &>/dev/null
 	fi
-	mkfs.ext4 -F $uselabel $TARGET
-fi
+	
+	rm -fr $VENOMROOT
+	mkdir -p $VENOMROOT
+	mount $partition_var $VENOMROOT
+	
+	totalsfs=$(unsquashfs -l $ROOTSFS | wc -l)
+	countsfs=0
+	
+	( unsquashfs -f -i -d $VENOMROOT $ROOTSFS | sed "s:$VENOMROOT::" | while read line; do
+		countsfs=$(( $countsfs + 1 ))
+		echo " $(( 100*$countsfs/$totalsfs ))% $line"
+	done ) | _dialog --progressbox "unsquash filesystem to $partition_var..." 20 70
+	
+	if [ -x $VENOMROOT/etc/rc.d/networkmanager ]; then
+		network=networkmanager
+	elif [ -x $VENOMROOT/etc/rc.d/network ]; then
+		network=networkmanager
+	fi
+	
+	if [ -x $VENOMROOT/etc/rc.d/lxdm ]; then
+		dm=lxdm
+	elif [ -x $VENOMROOT/etc/rc.d/lightdm ]; then
+		dm=lightdm
+	fi
 
-if [ $FRMTSWAP = 1 ]; then
-	mkswap $SWAP
-fi 
+	daemons="sysklogd dbus $dm alsa bluetooth gpm $network"
 
-if ! mountpoint -q $ROOT; then
-	mkdir -p $ROOT
-	mount $TARGET $ROOT
-fi
+	for d in $daemons; do
+		if [ -f $VENOMROOT/etc/rc.d/$d ]; then
+			daemon+=($d)
+		fi
+	done
 
-echo "Calculate files..."
-rsync -av $SYSTEM/ $ROOT/
-
-# rc.conf
-echo "#
+	_dialog --infobox "Applying saved settings..." 10 50
+	# rc.conf
+	echo "#
 # system configuration
 #
 
-HOSTNAME=\"$NEWHOSTNAME\"
-TIMEZONE=\"$TIMEZONE\"
-CLOCK=\"$CLOCK\"
+HOSTNAME=\"$hostname_var\"
+TIMEZONE=\"$timezone_var\"
+CLOCK=\"utc\"
 FONT=\"\"
-KEYMAP=\"us\"
+KEYMAP=\"$keymap_var\"
 DAEMONS=(${daemon[@]})
-" > $ROOT/etc/rc.conf
+" > $VENOMROOT/etc/rc.conf
 
-# fstab
-echo "# Begin /etc/fstab
+	# fstab
+	echo "# Begin /etc/fstab
 
 # file system  mount-point  type     options             dump  fsck
 #                                                              order
 
-$TARGET      /            ext4     defaults            1     1
-$SWAP      swap         swap     pri=1               0     0
-proc           /proc        proc     nosuid,noexec,nodev 0     0
+$partition_var      /            $filesystem_var     defaults            1     1" > $VENOMROOT/etc/fstab
+
+	if [ $add_swap = 1 ] && [ $swap_dev ]; then
+		echo "$swap_dev      swap         swap     pri=1               0     0" >> $VENOMROOT/etc/fstab
+	fi
+
+	echo "proc           /proc        proc     nosuid,noexec,nodev 0     0
 sysfs          /sys         sysfs    nosuid,noexec,nodev 0     0
 devpts         /dev/pts     devpts   gid=5,mode=620      0     0
 tmpfs          /run         tmpfs    defaults            0     0
 devtmpfs       /dev         devtmpfs mode=0755,nosuid    0     0
 
-# End /etc/fstab" > $ROOT/etc/fstab
+# End /etc/fstab" >> $VENOMROOT/etc/fstab
 
-#inchrootcmd usermod --login $NEWUSER --move-home --home /home/$NEWUSER nyx
-#inchrootcmd groupmod --new-name $NEWUSER nyx
+	if [ "$grub_var" != SKIP ]; then
+		_dialog --infobox "Installing grub..." 3 50
+		run_chroot grub-install $grub_var &>/dev/null
+		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null
+	fi
+	
+	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var
+	echo "$user_var:$passwd" | chpasswd -R $VENOMROOT -c SHA512
+	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512
+	
+	umount $VENOMROOT
+	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
+}
 
-echo "Adding '$NEWUSER' user..."
-inchrootcmd useradd -m -G users,wheel,audio,video -s /bin/bash $NEWUSER
-echo "Set password for '$NEWUSER'..."
-inchrootcmd passwd $NEWUSER
+mount_pseudofs() {
+	mount --bind /dev $VENOMROOT/dev
+	mount -t devpts devpts $VENOMROOT/dev/pts -o gid=5,mode=620
+	mount -t proc proc $VENOMROOT/proc
+	mount -t sysfs sysfs $VENOMROOT/sys
+	mount -t tmpfs tmpfs $VENOMROOT/run
+}
 
-echo "Set password for 'root'..."
-inchrootcmd passwd
+umount_pseudofs() {
+	umount $VENOMROOT/dev/pts
+	umount $VENOMROOT/dev
+	umount $VENOMROOT/run
+	umount $VENOMROOT/proc
+	umount $VENOMROOT/sys
+}
 
-echo "Installing grub..."
-[ $GRUB = 1 ] && inchrootcmd grub-install /dev/sda && inchrootcmd grub-mkconfig -o /boot/grub/grub.cfg
+run_chroot() {
+	mount_pseudofs
+	chroot $VENOMROOT "$@"
+	umount_pseudofs
+}
 
-umount $ROOT
+menu() {
+	MAINMSG="Welcome to Venom Linux Installer \n
+Set necessary options before start the installation \n"
+	if [ -z $DEFITEM ]; then
+		DEFITEM=Keyboard
+	fi
+	
+	mainmenu=$(_dialog --default-item $DEFITEM \
+			--cancel-label "Exit" \
+			--title "Venom Linux installer" \
+			--menu "$MAINMSG" 0 70 0 \
+			"Keyboard" "Set system Keyboard" \
+			"Partition" "Partition disk" \
+			"Timezone" "Set system timezone" \
+			"Hostname" "Set hostname" \
+			"UserAccount" "Set user account" \
+			"RootPassword" "Set root account" \
+			"Bootloader" "Set grub partition" \
+			"Settings" "View saved settings" \
+			"Install" "Install Venom" \
+			"Exit" "Exit installation")
+			
+	if [ $? = 0 ]; then
+		case $mainmenu in 
+		 	    Keyboard) menu_keymap      && [ -n $keymap_var ]    && DEFITEM=Partition ;;
+			   Partition) menu_partition   && [ -n $partition_var ] && DEFITEM=Timezone ;;
+			    Timezone) menu_timezone    && [ -n $timezone_var ]  && DEFITEM=Hostname ;;
+			    Hostname) menu_hostname    && [ -n $hostname_var ]  && DEFITEM=UserAccount ;;
+			 UserAccount) menu_useraccount && [ -n $user_var ]      && DEFITEM=RootPassword ;;
+			RootPassword) menu_rootpasswd  && [ -n $rootpasswd ]    && DEFITEM=Bootloader ;;
+			  Bootloader) menu_bootloader  && [ -n $grub_var ]      && DEFITEM=Settings ;;
+			    Settings) view_settings    && DEFITEM=Install ;;
+			     Install) install_now ;;
+			        Exit) _exit ;;
+		esac
+	else
+		_exit
+	fi
+}
 
-clear
-echo "************************************************"
-echo "*  Venom Linux installation process completed  *"
-echo "*             you can reboot now :)            *"
-echo "************************************************"
+if [ ! -f $ROOTSFS ]; then
+	echo "squashed filesystem '$ROOTSFS' not found!"
+	exit  1
+fi
 
+while true; do
+	menu
+done
+
+exit $?
