@@ -1,5 +1,13 @@
 #!/bin/bash
 
+trigger() {
+	if [ $(type $1) ]; then
+		$@
+	else
+		return 0
+	fi
+}
+
 USER=venom
 PASSWORD=venom
 
@@ -59,3 +67,13 @@ done
 
 echo "DAEMONS=(${daemon[@]})" >> /etc/rc.conf
 
+trigger /usr/bin/fc-cache -s
+trigger /usr/bin/gdk-pixbuf-query-loaders --update-cache
+trigger /usr/bin/gio-querymodules /usr/lib/gio/modules
+trigger /usr/bin/gio-querymodules-32 /usr/lib32/gio/modules
+trigger /usr/bin/glib-compile-schemas /usr/share/glib-2.0/schemas
+trigger /usr/bin/gtk-query-immodules-2.0 --update-cache
+trigger /usr/bin/gtk-query-immodules-3.0 --update-cache
+trigger /sbin/udevadm hwdb --update
+trigger /usr/bin/update-desktop-database --quiet
+trigger /usr/bin/update-mime-database /usr/share/mime

@@ -105,6 +105,17 @@ main() {
 		VENOMROOTFS=$SRC
 		#chroot_run scratch sync
 		#chroot_run scratch sysup --no-confirm
+		if [ ! -f $VENOMROOTFS/usr/bin/mkinitramfs ]; then
+			msg "ERROR: mkinitramfs is not installed for venom rootdir"
+			exit 1
+		fi
+		if [ -f $VENOMROOTFS/boot/vmlinuz-venom ]; then
+			kernver=$(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9)
+		else
+			msg "ERROR: kernel not found in venom rootdir directory"
+			exit 1
+		fi
+		chroot_run mkinitramfs -k $kernver -o /boot/initrd-venom.img || die
 		make_rootsfs
 	elif [ "$SRCTYPE" = "sfs" ]; then
 		VENOMROOTSFS=$SRC

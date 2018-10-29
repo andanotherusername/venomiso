@@ -8,7 +8,7 @@ WIDTH=70
 HEIGHT=10
 
 VENOMROOT="/mnt/venom"
-ROOTSFS="root.sfs"
+ROOTSFS="/mnt/initramfs/.medium/filesystem/root.sfs"
 
 _dialog() {
 	dialog --no-mouse "$@" 3>&1 1>&2 2>&3
@@ -144,6 +144,10 @@ menu_partition() {
 	fi
 	
 	# select partition to install venom
+	if [ ! $(showpartition &/dev/null) ]; then
+		_dialog --msgbox "No partition found\nPlease create partition first" 7 50
+		return
+	fi
 	for p in $(showpartition); do
 		psize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $p | awk '{print $2}')
 		partmenu="$partmenu $p $psize"
@@ -194,7 +198,7 @@ menu_bootloader() {
 			dsize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep $d | grep -w disk | awk '{print $2}')
 			dd="$dd $d $dsize"
 		done
-		grub_var=$(_dialog --menu "Choose disk to install grub" $DEFSIZE ${dd})
+		grub_var=$(_dialog --menu "Choose disk to install grub" 0 50 0 ${dd})
 		[ $? = 0 ] || return
 	else
 		grub_var=SKIP
@@ -202,7 +206,7 @@ menu_bootloader() {
 }
 
 view_settings() {
-	_dialog --title "Saved settings for installation" --msgbox "
+	_dialog --title "  Saved settings for installation  " --msgbox "
 Keymap    : $keymap_var
 Timezone  : $timezone_var
 Hostname  : $hostname_var
@@ -228,7 +232,7 @@ install_now() {
 	
 	if [ "$notset" ]; then
 		notset=$(echo $notset | tr ' ' '\n')
-		_dialog --title "This options is not set" --msgbox "$notset" 0 0
+		_dialog --title "  This options is not set  " --msgbox "$notset" 0 0
 		return
 	fi
 	
@@ -318,6 +322,18 @@ tmpfs          /run         tmpfs    defaults            0     0
 devtmpfs       /dev         devtmpfs mode=0755,nosuid    0     0
 
 # End /etc/fstab" >> $VENOMROOT/etc/fstab
+	
+	_dialog --infobox "Creating user ($user_var)..." 3 50
+	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var
+	echo "$user_var:$passwd" | chpasswd -R $VENOMROOT -c SHA512
+	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512
+	
+	_dialog --infobox "Generating locales (en_US.UTF-8)..." 3 50
+	sed 's/#\(en_US\.UTF-8\)/\1/' -i $VENOMROOT/etc/locales
+	run_chroot genlocales &>/dev/null
+	
+	_dialog --infobox "Generating initramfs..." 3 50
+	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null
 
 	if [ "$grub_var" != SKIP ]; then
 		_dialog --infobox "Installing grub..." 3 50
@@ -325,12 +341,26 @@ devtmpfs       /dev         devtmpfs mode=0755,nosuid    0     0
 		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null
 	fi
 	
-	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var
-	echo "$user_var:$passwd" | chpasswd -R $VENOMROOT -c SHA512
-	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512
+	_dialog --infobox "Trigger required hook..." 3 50
+	trigger /usr/bin/fc-cache -s
+	trigger /usr/bin/gdk-pixbuf-query-loaders --update-cache
+	trigger /usr/bin/gio-querymodules /usr/lib/gio/modules
+	trigger /usr/bin/gio-querymodules-32 /usr/lib32/gio/modules
+	trigger /usr/bin/glib-compile-schemas /usr/share/glib-2.0/schemas
+	trigger /usr/bin/gtk-query-immodules-2.0 --update-cache
+	trigger /usr/bin/gtk-query-immodules-3.0 --update-cache
+	trigger /sbin/udevadm hwdb --update
+	trigger /usr/bin/update-desktop-database --quiet
+	trigger /usr/bin/update-mime-database /usr/share/mime
 	
 	umount $VENOMROOT
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
+}
+
+trigger() {
+	if [ -x $VENOMROOTFS/$1 ]; then
+		run_chroot $@
+	fi
 }
 
 mount_pseudofs() {
@@ -364,14 +394,14 @@ Set necessary options before start the installation \n"
 	
 	mainmenu=$(_dialog --default-item $DEFITEM \
 			--cancel-label "Exit" \
-			--title "Venom Linux installer" \
+			--title "  Venom Linux installer  " \
 			--menu "$MAINMSG" 0 70 0 \
-			"Keyboard" "Set system Keyboard" \
+			"Keyboard" "Set Keyboard" \
 			"Partition" "Partition disk" \
-			"Timezone" "Set system timezone" \
+			"Timezone" "Set timezone" \
 			"Hostname" "Set hostname" \
 			"UserAccount" "Set user account" \
-			"RootPassword" "Set root account" \
+			"RootPassword" "Set root password" \
 			"Bootloader" "Set grub partition" \
 			"Settings" "View saved settings" \
 			"Install" "Install Venom" \
@@ -387,13 +417,23 @@ Set necessary options before start the installation \n"
 			RootPassword) menu_rootpasswd  && [ -n $rootpasswd ]    && DEFITEM=Bootloader ;;
 			  Bootloader) menu_bootloader  && [ -n $grub_var ]      && DEFITEM=Settings ;;
 			    Settings) view_settings    && DEFITEM=Install ;;
-			     Install) install_now ;;
+			     Install) install_now && DEFITEM=Exit ;;
 			        Exit) _exit ;;
 		esac
 	else
 		_exit
 	fi
 }
+
+if [ ! $(type -p unsquashfs) ]; then
+	echo "squashfs-tools is not installed, aborted."
+	exit 1
+fi
+
+if [ ! $(type -p dialog) ]; then
+	echo "dialog is not installed, aborted."
+	exit 1
+fi
 
 if [ ! -f $ROOTSFS ]; then
 	echo "squashed filesystem '$ROOTSFS' not found!"
