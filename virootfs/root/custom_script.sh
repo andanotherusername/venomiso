@@ -32,14 +32,14 @@ fi
 if [ -x $(type -p lxdm) ]; then
 	#sed "s,# autologin=dgod,autologin=$USER," -i /etc/lxdm/lxdm.conf
 	sed "s,# session=/usr/bin/startlxde,session=$SSN," -i /etc/lxdm/lxdm.conf
-	sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
+	#sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
 elif [ -x $(type -p lightdm) ]; then
 	# autologin user
 	sed -i "s/#autologin-user=/autologin-user=$USER/" /etc/lightdm/lightdm.conf
 	sed -i "s/#autologin-session=/autologin-session=mate/" /etc/lightdm/lightdm.conf
 
 	# theme and background
-	sed -i "s:#background=:background=/usr/share/backgrounds/venom1.jpg:" /etc/lightdm/lightdm-gtk-greeter.conf
+	#sed -i "s:#background=:background=/usr/share/backgrounds/venom1.jpg:" /etc/lightdm/lightdm-gtk-greeter.conf
 	sed -i "s:#theme-name=:theme-name=Arc-Darker:" /etc/lightdm/lightdm-gtk-greeter.conf
 	sed -i "s:#icon-theme-name=:icon-theme-name=Papirus-Dark:" /etc/lightdm/lightdm-gtk-greeter.conf
 fi

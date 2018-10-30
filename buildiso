@@ -48,21 +48,41 @@ build_iso() {
 
 prepare_bootfiles() {
 	# kernel
-	if [ -f $VENOMROOTFS/boot/vmlinuz-venom ]; then
-		msg "copying kernel..."
-		cp $VENOMROOTFS/boot/vmlinuz-venom $VENOMISO/boot/vmlinuz
+	if [ $KERNEL ]; then
+		if [ -f $KERNEL ]; then
+			msg "copying kernel..."
+			cp $KERNEL $VENOMISO/boot/vmlinuz
+		else
+			msg "kernel '$KERNEL' not found"
+			exit 1
+		fi
 	else
-		msg "kernel (vmlinuz-venom) not exist!"
-		exit 1
+		if [ -f $VENOMROOTFS/boot/vmlinuz-venom ]; then
+			msg "copying kernel..."
+			cp $VENOMROOTFS/boot/vmlinuz-venom $VENOMISO/boot/vmlinuz
+		else
+			msg "kernel (vmlinuz-venom) not exist!"
+			exit 1
+		fi
 	fi
 
 	# initrd
-	if [ -f $VENOMROOTFS/boot/initrd-venom.img ]; then
-		msg "copying initramfs..."
-		cp $VENOMROOTFS/boot/initrd-venom.img $VENOMISO/boot/initrd
+	if [ $INITRD ]; then
+		if [ -f $INITRD ]; then
+			msg "copying initramfs..."
+			cp $INITRD $VENOMISO/boot/initrd
+		else
+			msg "initramfs '$INITRD' not found"
+			exit 1
+		fi
 	else
-		msg "initramfs image (initrd) not exist!"
-		exit 1
+		if [ -f $VENOMROOTFS/boot/initrd-venom.img ]; then
+			msg "copying initramfs..."
+			cp $VENOMROOTFS/boot/initrd-venom.img $VENOMISO/boot/initrd
+		else
+			msg "initramfs image (initrd) not exist!"
+			exit 1
+		fi
 	fi
 }
 
@@ -159,6 +179,18 @@ parseopt() {
 								exit 1
 							fi
 							OUTPUT=$2
+							shift ;;
+			-i|--initrd)	if [ ! $2 ]; then
+								echo "ERROR: option '$1' requires an argument."
+								exit 1
+							fi
+							INITRD=$2
+							shift ;;
+			-k|--kernel)	if [ ! $2 ]; then
+								echo "ERROR: option '$1' requires an argument."
+								exit 1
+							fi
+							KERNEL=$2
 							shift ;;
 				*)			if [ "$SRC" ]; then
 								echo "ERROR: invalid option '$1'"
