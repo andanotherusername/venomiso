@@ -1,0 +1,105 @@
+#!/bin/bash -e
+
+chroot_run() {
+	mount_pseudofs
+	chroot $VENOMSRC $@
+	umount_pseudofs
+}
+
+mount_pseudofs() {
+	mount --bind /dev $VENOMSRC/dev
+	mount -t devpts devpts $VENOMSRC/dev/pts -o gid=5,mode=620
+	mount -t proc proc $VENOMSRC/proc
+	mount -t sysfs sysfs $VENOMSRC/sys
+	mount -t tmpfs tmpfs $VENOMSRC/run
+}
+
+umount_pseudofs() {
+	umount $VENOMSRC/dev/pts
+	umount $VENOMSRC/dev
+	umount $VENOMSRC/run
+	umount $VENOMSRC/proc
+	umount $VENOMSRC/sys
+}
+
+usage() {
+	cat << EOF
+Usage:
+  $(basename $0) [options]
+  
+Options:
+  -c, --cache        set package cache directory
+  -p, --package      package to install into iso
+  -i, --initrd       use custom initrd
+  -k, --kernel       use custom kernel
+  -o, --output       output name for iso
+  
+EOF
+}
+
+CWD=$PWD
+WDIR=/tmp/venomiso
+ISOLINUXDIR=$CWD/isolinux
+DISTRONAME="Venom Linux"
+VENOMSRC=/mnt/venom
+LABEL=VenomLive
+OUTPUT=venom.iso
+
+isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
+isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
+
+rm -fr $WDIR
+mkdir -p $WDIR
+
+# prepare isolinux in working dir
+mkdir -p $WDIR/{filesystem,isolinux,boot}
+for file in $isolinux_files; do
+	cp $ISOLINUXDIR/$file $WDIR/isolinux
+done
+echo "$DISTRONAME" > $WDIR/isolinux/venomlive
+[ -d virootfs ] && cp -aR virootfs $WDIR
+
+# mount bind cache
+mkdir $CWD/cache_packages $CWD/cache_sources
+mount --bind $CWD/cache_packages $VENOMSRC/var/cache/scratchpkg/packages
+mount --bind $CWD/cache_sources $VENOMSRC/var/cache/scratchpkg/sources
+
+# install pkgs
+chroot_run scratch install squashfs-tools libisoburn --no-confirm
+
+# umount binded cache
+umount $VENOMSRC/var/cache/scratchpkg/sources
+umount $VENOMSRC/var/cache/scratchpkg/packages
+
+# copy kernel
+cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz
+
+# generate initrd
+kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
+chroot_run mkinitramfs -k $kernver -o /boot/initrd-venom.img
+cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
+
+# make sfs
+mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
+		-b 1048576 -comp xz -Xdict-size 100% \
+		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
+		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
+		-e $VENOMSRC/tmp/*
+
+rm -f $OUTPUT
+xorriso -as mkisofs \
+		-r -J -joliet-long \
+		-l -cache-inodes \
+		-isohybrid-mbr $CWD/isolinux/isohdpfx.bin \
+		-partition_offset 16 \
+		-A "$LABEL" \
+		-V "$LABEL" \
+		-b isolinux/isolinux.bin \
+		-c isolinux/boot.cat \
+		-no-emul-boot \
+		-boot-load-size 4 \
+		-boot-info-table \
+		-o $OUTPUT \
+		$WDIR
+
+exit 0

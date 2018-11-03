@@ -3,3 +3,4 @@ vmlinuz*
 *.sfs*
 *.iso
 *.txz
+cache*
