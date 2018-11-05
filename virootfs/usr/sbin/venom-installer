@@ -1,13 +1,11 @@
 #!/bin/bash
 
-BACKTITLE="Venom Linux Installation"
-
 DEFSIZE="10 50 0"
 YESNOSIZE="8 50"
 WIDTH=70
 HEIGHT=10
 
-VENOMROOT="/mnt/venom"
+VENOMROOT="/tmp/venominstall"
 ROOTSFS="/lib/initramfs/medium/filesystem/root.sfs"
 
 _dialog() {
@@ -36,18 +34,16 @@ menu_keymap() {
         _KEYMAPS="${_KEYMAPS} ${f} -"
 	done
 	keymap_var=$(_dialog --menu "Select your keymap" 0 50 0 ${_KEYMAPS})
-
 }
 
 menu_timezone() {
-	local _tzones="$(cd /usr/share/zoneinfo; find Africa/ America/ Antarctica/ Arctic/ Asia/ Atlantic/ Australia/ Europe/ Indian/ Pacific/ posix/ -type f | sort)"
-    local _TIMEZONES=
+	local _tzones="$(cd /usr/share/zoneinfo; find Africa/ America/ Antarctica/ Arctic/ Asia/ Atlantic/ Australia/ Europe/ Indian/ Pacific/ posix/ -maxdepth 1 -type f | sort)"
+	local _TIMEZONES=
 
-    for f in ${_tzones}; do
-        _TIMEZONES="${_TIMEZONES} ${f} -"
-    done
-	timezone_var=$(_dialog --menu "Select your timezone" 0 40 0 ${_TIMEZONES})
-
+	for f in ${_tzones}; do
+		_TIMEZONES="${_TIMEZONES} ${f} -"
+	done
+	timezone_var=$(_dialog --menu "Select your timezone" 0 50 0 ${_TIMEZONES})
 }
 
 menu_hostname() {
@@ -121,9 +117,15 @@ showdisk() {
 	echo $disk
 }
 
+showswap() {
+	local swap
+	swap=$(fdisk -l | grep ^\/dev | grep swap | awk '{print $1}')
+	echo $swap
+}
+
 showpartition() {
 	local part
-	part=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w part | awk '{print $1}')
+	part=$(fdisk -l | grep ^\/dev | grep -Ev '(swap|Extended)' | awk '{print $1}')
 	echo $part
 }
 
@@ -131,6 +133,8 @@ menu_partition() {
 	local dsize
 	local dd
 	local partmenu
+	local s
+	local swapmenu
 	
 	_dialog --yesno "Run cfdisk to partition disk?" $YESNOSIZE
 	if [ $? = 0 ]; then
@@ -144,46 +148,66 @@ menu_partition() {
 	fi
 	
 	# select partition to install venom
-	if [ ! $(showpartition &/dev/null) ]; then
+	if [[ ! $(showpartition) ]]; then
 		_dialog --msgbox "No partition found\nPlease create partition first" 7 50
 		return
 	fi
 	for p in $(showpartition); do
-		psize=$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $p | awk '{print $2}')
-		partmenu="$partmenu $p $psize"
+		psize=$(fdisk -l | grep ^$p | awk '{print $5}')
+		fstype=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep $p | awk '{print $3}')
+		[ $fstype ] || fstype=none
+		partmenu="$partmenu $p size:$psize,fstype:$fstype"
 	done
-	partition_var=$(_dialog --menu "Choose partition to install Venom" 0 50 0 ${partmenu})
+	partition_var=$(_dialog --menu "Choose partition to install Venom" 0 60 0 ${partmenu})
 	[ $? = 0 ] || return
-	
-	# select filesystem type
-	_dialog --yesno "Do you want to format $partition_var?" $YESNOSIZE
-	if [ $? = 0 ]; then
-		filesystem_var=$(_dialog --menu "Select filesystem for $partition_var" 0 70 0 \
-			ext4 "Next generation of Ext3 file system" \
-			ext3 "Journaling version of Ext2 file system" \
-			ext2 "Standard file system Ext2" \
-			btrfs "New promising file system" \
-			reiserfs "Very stable file system but not maintain anymore" \
-			xfs "High performance journaling file system create by SGI")
-		[ $? = 0 ] || return
-	fi
-	
-	swap_dev=$(fdisk -l -o device,type | grep swap | cut -d " " -f1 | head -n1)
-	if [ -n $swap_dev ]; then
-		_dialog --yesno "Swap partition found in $swap_dev, do you want to format it?" $YESNOSIZE
+
+	if [ "$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep -w $partition_var | awk '{print $3}')" != "" ]; then
+		_dialog --yesno "Do you want to format $partition_var?" $YESNOSIZE
 		if [ $? = 0 ]; then
-			format_swap=1
+			partformat=1
 		else
-			if [ "$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $swap_dev | grep -w swap)" ]; then
-				swap_ok=1
-			fi
+			partformat=
 		fi
-		if [ "$format_swap" = 1 ] || [ "$swap_ok" = 1 ]; then
-			_dialog --yesno "Add swap partition ($swap_dev) to fstab?" $YESNOSIZE
-			if [ $? = 0 ]; then
-				add_swap=1
+	else
+		partformat=1
+	fi
+
+	if [ $partformat = 1 ]; then
+		# select filesystem type
+		filesystem_var=$(_dialog --menu "Select filesystem for $partition_var" 0 60 0 \
+			ext4 "Ext4 Journaling Filesystem" \
+			ext3 "Ext3 Journaling Filesystem" \
+			ext2 "Standard Linux ext2 Filesystem" \
+			btrfs "Btrfs Copy-on-Write B-tree Filesystem" \
+			reiserfs "ReiserFS Journaling Filesystem" \
+			xfs "SGI's Journaling Filesystem")
+		[ $? = 0 ] || return
+	else
+		filesystem_var=
+	fi
+
+	if [[ $(showswap) ]]; then
+		_dialog --yesno "Swap partition found, do you want to use it?" $YESNOSIZE
+		if [ $? = 0 ]; then
+			for s in $(showswap); do
+				ssize=$(fdisk -l | grep ^$s | awk '{print $5}')
+				swapmenu="$swapmenu $s $ssize"
+			done
+			swap_var=$(_dialog --menu "Choose swap partition" 0 50 0 ${swapmenu})
+			# check if swap partition is ok, ask if user want to re-format it, else dont ask, just format it
+			if [ "$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $swap_var | grep -w swap)" ]; then
+				_dialog --yesno "Format swap partition ($swap_var)?" $YESNOSIZE
+				if [ $? = 0 ]; then
+					format_swap=1
+				fi
+			else
+				format_swap=1
 			fi
+		else
+			swap_var=none
 		fi
+	else
+		swap_var=none
 	fi		
 }
 
@@ -211,10 +235,10 @@ Keymap    : $keymap_var
 Timezone  : $timezone_var
 Hostname  : $hostname_var
 User      : $user_var
-UserPasswd: $([ $passwd ] && echo -done-)
+UserPswd  : $([ $passwd ] && echo -done-)
 Rootpswd  : $([ $rootpasswd ] && echo -done-)
-Partition : $partition_var
-Swap      : $swap_dev
+Partition : $partition_var $filesystem_var
+Swap      : $swap_var $([ $format_swap = 1 ] && echo re-format)
 Grub      : $grub_var
 " 0 0
 }
@@ -252,9 +276,9 @@ install_now() {
 	fi
 	
 	# make swap
-	if [ "$format_swap" = 1 ] && [ "$swap_dev" ]; then
-		_dialog --infobox "Formatting partition $swap_dev to swap" 3 50
-		mkswap $swap_dev &>/dev/null
+	if [ "$format_swap" = 1 ] && [ "$swap_var" ]; then
+		_dialog --infobox "Formatting partition $swap_var to swap" 3 50
+		mkswap $swap_var &>/dev/null
 	fi
 	
 	rm -fr $VENOMROOT
@@ -311,8 +335,8 @@ DAEMONS=(${daemon[@]})
 
 $partition_var      /            $filesystem_var     defaults            1     1" > $VENOMROOT/etc/fstab
 
-	if [ $add_swap = 1 ] && [ $swap_dev ]; then
-		echo "$swap_dev      swap         swap     pri=1               0     0" >> $VENOMROOT/etc/fstab
+	if [ $swap_var != none ]; then
+		echo "$swap_var      swap         swap     pri=1               0     0" >> $VENOMROOT/etc/fstab
 	fi
 
 	echo "proc           /proc        proc     nosuid,noexec,nodev 0     0
@@ -425,6 +449,12 @@ Set necessary options before start the installation \n"
 	fi
 }
 
+debug=0
+
+if [ "$1" = "--debug" ]; then
+	debug=1
+fi
+
 if [ ! $(type -p unsquashfs) ]; then
 	echo "squashfs-tools is not installed, aborted."
 	exit 1
@@ -435,7 +465,7 @@ if [ ! $(type -p dialog) ]; then
 	exit 1
 fi
 
-if [ ! -f $ROOTSFS ]; then
+if [ ! -f $ROOTSFS ] && [ $debug != 1 ]; then
 	echo "squashed filesystem '$ROOTSFS' not found!"
 	exit  1
 fi
