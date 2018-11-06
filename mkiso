@@ -1,5 +1,17 @@
 #!/bin/bash -e
 
+interrupted() {
+	die
+	exit 2
+}
+
+die() {
+	[ "$@" ] && echo "ERROR: $@"
+	umount_pseudofs
+	umountbind_cache
+	rm -fr $WDIR
+}
+
 chroot_run() {
 	mount_pseudofs
 	chroot $VENOMSRC $@
@@ -15,11 +27,24 @@ mount_pseudofs() {
 }
 
 umount_pseudofs() {
-	umount $VENOMSRC/dev/pts
-	umount $VENOMSRC/dev
-	umount $VENOMSRC/run
-	umount $VENOMSRC/proc
-	umount $VENOMSRC/sys
+	umount $VENOMSRC/dev/pts &>/dev/null
+	umount $VENOMSRC/dev &>/dev/null
+	umount $VENOMSRC/run &>/dev/null
+	umount $VENOMSRC/proc &>/dev/null
+	umount $VENOMSRC/sys &>/dev/null
+}
+
+mountbind_cache() {
+	# mount bind cachedir
+	mkdir -p $SRC_CACHE $PKG_CACHE
+	mount --bind $SRC_CACHE $VENOMSRC/var/cache/scratchpkg/packages
+	mount --bind $PKG_CACHE $VENOMSRC/var/cache/scratchpkg/sources
+}
+
+umountbind_cache() {
+	# umount binded cachedir
+	umount $VENOMSRC/var/cache/scratchpkg/sources &>/dev/null
+	umount $VENOMSRC/var/cache/scratchpkg/packages &>/dev/null
 }
 
 usage() {
@@ -28,25 +53,69 @@ Usage:
   $(basename $0) [options]
   
 Options:
-  -c, --cache        set package cache directory
-  -p, --package      package to install into iso
-  -i, --initrd       use custom initrd
-  -k, --kernel       use custom kernel
-  -o, --output       output name for iso
+  -p <path>           set packages cache directory
+  -s <path>           set sources cache directory
+  -P <pkg1 pkgN ...>  package to install into iso
+  -i <initrd>         use custom initrd
+  -k <kernel>         use custom kernel
+  -o <name.iso>       output name for iso
+  -h                  show this help msg
   
 EOF
+}
+
+parseopt() {
+	while [ "$1" ]; do
+		case $1 in
+			-p) PKG_CACHE=$2
+				shift 2;;
+			-s) SRC_CACHE=$2
+				shift 2;;
+			-i) INITRD_FILE=$2
+				shift 2;;
+			-k) KERNEL_FILE=$2
+				shift 2;;
+			-o) OUTPUT=$2
+				shift 2;;
+			-P) while [ "$2" ]; do
+					case $2 in
+						-*) break ;;
+						*) [ -z "$ADD_PKGS" ] && expkg="$2" || expkg="$ADD_PKGS $2"
+					esac
+					shift
+				done ;;
+			-h) usage; exit 0;;
+			*)  VENOMSRC=$1
+				shift;;
+		esac
+	done
 }
 
 CWD=$PWD
 WDIR=/tmp/venomiso
 ISOLINUXDIR=$CWD/isolinux
 DISTRONAME="Venom Linux"
-VENOMSRC=/mnt/venom
 LABEL=VenomLive
-OUTPUT=venom.iso
+REQ_PKGS="dialog squashfs-tools libisoburn"
 
 isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
 isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
+
+parseopt $@
+
+OUTPUT=${OUTPUT:-venom.iso}
+PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
+SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
+
+trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+if [ -z $VENOMSRC ]; then
+	echo "Venom source dir not define! Aborted."
+	exit 1
+elif [ ! -d $VENOMSRC ]; then
+	echo "Directory '$VENOMSRC' not exist."
+	exit 1
+fi
 
 rm -fr $WDIR
 mkdir -p $WDIR
@@ -59,24 +128,17 @@ done
 echo "$DISTRONAME" > $WDIR/isolinux/venomlive
 [ -d virootfs ] && cp -aR virootfs $WDIR
 
-# mount bind cache
-mkdir $CWD/cache_packages $CWD/cache_sources
-mount --bind $CWD/cache_packages $VENOMSRC/var/cache/scratchpkg/packages
-mount --bind $CWD/cache_sources $VENOMSRC/var/cache/scratchpkg/sources
-
 # install pkgs
-chroot_run scratch install squashfs-tools libisoburn --no-confirm
-
-# umount binded cache
-umount $VENOMSRC/var/cache/scratchpkg/sources
-umount $VENOMSRC/var/cache/scratchpkg/packages
+mountbind_cache
+chroot_run scratch install $REQ_PKGS $ADD_PKGS --no-confirm || die "failed install packages"
+umountbind_cache
 
 # copy kernel
-cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz
+cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz || die "failed copying kernel"
 
 # generate initrd
 kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-chroot_run mkinitramfs -k $kernver -o /boot/initrd-venom.img
+chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
 cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
 
 # make sfs
@@ -84,7 +146,7 @@ mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
 		-b 1048576 -comp xz -Xdict-size 100% \
 		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
 		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
-		-e $VENOMSRC/tmp/*
+		-e $VENOMSRC/tmp/* || die "failed create squashed filesystem"
 
 rm -f $OUTPUT
 xorriso -as mkisofs \
@@ -100,6 +162,6 @@ xorriso -as mkisofs \
 		-boot-load-size 4 \
 		-boot-info-table \
 		-o $OUTPUT \
-		$WDIR
+		$WDIR || die "failed create iso"
 
 exit 0
