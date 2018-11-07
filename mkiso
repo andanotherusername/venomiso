@@ -64,6 +64,7 @@ Options:
   -i <initrd>         use custom initrd
   -k <kernel>         use custom kernel
   -o <name.iso>       output name for iso
+  -c <file.preset>    use preset file
   -h                  show this help msg
   
 Note:
@@ -72,20 +73,36 @@ Note:
 EOF
 }
 
+checkinput() {
+	if [ -z $1 ] || [[ $1 = -* ]]; then
+		echo "this option need argument"
+		exit 2
+	fi
+}
+
 parseopt() {
 	while [ "$1" ]; do
 		case $1 in
-			-p) PKG_CACHE=$2
+			-p) checkinput $2
+				PKG_CACHE=$2
 				shift 2;;
-			-s) SRC_CACHE=$2
+			-s) checkinput $2
+				SRC_CACHE=$2
 				shift 2;;
-			-i) INITRD_FILE=$2
+			-i) checkinput $2
+				INITRD_FILE=$2
 				shift 2;;
-			-k) KERNEL_FILE=$2
+			-k) checkinput $2
+				KERNEL_FILE=$2
 				shift 2;;
-			-o) OUTPUT=$2
+			-o) checkinput $2
+				OUTPUT=$2
 				shift 2;;
-			-P) while [ "$2" ]; do
+			-c) checkinput $2
+				PRESET=$2
+				shift 2;;
+			-P) checkinput $2
+				while [ "$2" ]; do
 					case $2 in
 						-*) break ;;
 						*) [ -z "$ADD_PKGS" ] && ADD_PKGS="$2" || ADD_PKGS="$ADD_PKGS $2"
@@ -113,6 +130,15 @@ isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
 
 parseopt $@
 
+if [ "$PRESET" ] && [ -f "$PRESET" ]; then
+	. $PRESET
+fi
+
+if [ "$(echo ${OUTPUT##*.})" != "iso" ]; then
+	echo "output name should be .iso extension"
+	exit 1
+fi
+
 OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
 PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
 SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
@@ -120,7 +146,7 @@ SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 if [ $UID != 0 ]; then
-	echo "ERROR: $(basename $0) need run as root."
+	echo "$(basename $0) need run as root."
 	exit 3
 fi
 
@@ -153,7 +179,7 @@ echo "$DISTRONAME" > $WDIR/isolinux/venomlive
 mountbind_cache
 chroot_run scratch sync
 chroot_run scratch sysup --no-confirm --no-backup
-chroot_run scratch install $REQ_PKGS $ADD_PKGS --no-confirm || die "failed install packages"
+chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
 # copy kernel

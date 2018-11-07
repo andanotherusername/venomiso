@@ -1,0 +1,9 @@
+#
+# this file will get sourced by mkiso script
+#
+
+# set the output name
+OUTPUT="venom-xorg-1.0-$(date +"%Y%m%d").iso"
+
+# set extra packages need to include into iso
+EXTRA_PKGS="xorg xorg-video-drivers"
