@@ -134,14 +134,14 @@ if [ "$PRESET" ] && [ -f "$PRESET" ]; then
 	. $PRESET
 fi
 
+OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
+PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
+SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
+
 if [ "$(echo ${OUTPUT##*.})" != "iso" ]; then
 	echo "output name should be .iso extension"
 	exit 1
 fi
-
-OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
-PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
-SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
 
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
@@ -177,8 +177,8 @@ echo "$DISTRONAME" > $WDIR/isolinux/venomlive
 
 # install pkgs
 mountbind_cache
-chroot_run scratch sync
-chroot_run scratch sysup --no-confirm --no-backup
+chroot_run scratch sync || die "faled updating ports"
+chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
 chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
@@ -188,7 +188,7 @@ cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz || die "failed copying kernel
 # generate initrd
 kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
 chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
-cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
+cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
 
 # make sfs
 mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \

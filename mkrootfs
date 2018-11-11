@@ -1,87 +1,171 @@
 #!/bin/bash -e
 
+interrupted() {
+	die "Abort by user."
+}
+
+cleanup() {
+	[ "$cleanvenomsrc" = 1 ] && rm -fr $VENOMSRC
+}
+
+die() {
+	[ "$@" ] && echo "ERROR: $@"
+	umount_pseudofs
+	umountbind_cache
+	cleanup
+	exit 1
+}
+
 chroot_run() {
 	mount_pseudofs
-	chroot $WDIR $@
+	chroot $VENOMSRC $@
 	umount_pseudofs
 }
 
 mount_pseudofs() {
-	mount --bind /dev $WDIR/dev
-	mount -t devpts devpts $WDIR/dev/pts -o gid=5,mode=620
-	mount -t proc proc $WDIR/proc
-	mount -t sysfs sysfs $WDIR/sys
-	mount -t tmpfs tmpfs $WDIR/run
+	mount --bind /dev $VENOMSRC/dev
+	mount -t devpts devpts $VENOMSRC/dev/pts -o gid=5,mode=620
+	mount -t proc proc $VENOMSRC/proc
+	mount -t sysfs sysfs $VENOMSRC/sys
+	mount -t tmpfs tmpfs $VENOMSRC/run
 }
 
 umount_pseudofs() {
-	umount $WDIR/dev/pts
-	umount $WDIR/dev
-	umount $WDIR/run
-	umount $WDIR/proc
-	umount $WDIR/sys
+	umount $VENOMSRC/dev/pts &>/dev/null
+	umount $VENOMSRC/dev &>/dev/null
+	umount $VENOMSRC/run &>/dev/null
+	umount $VENOMSRC/proc &>/dev/null
+	umount $VENOMSRC/sys &>/dev/null
+}
+
+mountbind_cache() {
+	# mount bind cachedir
+	mkdir -p $SRC_CACHE $PKG_CACHE
+	mount --bind $SRC_CACHE $VENOMSRC/var/cache/scratchpkg/sources
+	mount --bind $PKG_CACHE $VENOMSRC/var/cache/scratchpkg/packages
+}
+
+umountbind_cache() {
+	# umount binded cachedir
+	umount $VENOMSRC/var/cache/scratchpkg/sources &>/dev/null
+	umount $VENOMSRC/var/cache/scratchpkg/packages &>/dev/null
 }
 
 usage() {
 	cat << EOF
 Usage:
-  $(basename $0) [options]
+  $(basename $0) [options] <venom source>
   
 Options:
-  -c, --cache        set package cache directory
-  -p, --package      package to install into iso
-  -i, --initrd       use custom initrd
-  -k, --kernel       use custom kernel
-  -o, --output       output name for iso
+  -p <path>           set packages cache directory
+  -s <path>           set sources cache directory
+  -P <pkg1 pkgN ...>  package to install into iso
+  -o <name.iso>       output name for iso
+  -h                  show this help msg
+  
+Note:
+  'venom source' should be a rootfs directory or rootfs tarball image
   
 EOF
 }
 
+checkinput() {
+	if [ -z $1 ] || [[ $1 = -* ]]; then
+		echo "this option need argument"
+		exit 2
+	fi
+}
+
+parseopt() {
+	while [ "$1" ]; do
+		case $1 in
+			-p) checkinput $2
+				PKG_CACHE=$2
+				shift 2;;
+			-s) checkinput $2
+				SRC_CACHE=$2
+				shift 2;;
+			-o) checkinput $2
+				OUTPUT=$2
+				shift 2;;
+			-P) checkinput $2
+				while [ "$2" ]; do
+					case $2 in
+						-*) break ;;
+						*) [ -z "$ADD_PKGS" ] && ADD_PKGS="$2" || ADD_PKGS="$ADD_PKGS $2"
+					esac
+					shift
+				done
+				shift ;;
+			-h) usage; exit 0;;
+			*)  VENOM=$1
+				shift;;
+		esac
+	done
+}
+
 CWD=$PWD
-WDIR=/tmp/venomrootfs
-ISOLINUXDIR=$CWD/isolinux
-DISTRONAME="Venom Linux"
-VENOMSRC=/mnt/venom
-LABEL=VenomLive
-OUTPUT=venom.iso
-DATE=$(date +"%Y%m%d")
+VENOMSRC=/tmp/venomrootfs
 
 selecteddir="bin dev home lib64 mnt proc run srv tmp var boot etc lib media opt root sbin sys usr"
 
-isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
-isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
+parseopt $@
 
-rm -fr $WDIR
-mkdir -p $WDIR
+OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").txz}
+PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
+SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
 
-tar -xvJpf $1 -C $WDIR
+if [ "$(echo ${OUTPUT##*.})" != "txz" ]; then
+	echo "output name should be .txz extension"
+	exit 1
+fi
 
-# mount bind cache
-mkdir -p $CWD/cache_packages $CWD/cache_sources
-mount --bind $CWD/cache_packages $WDIR/var/cache/scratchpkg/packages
-mount --bind $CWD/cache_sources $WDIR/var/cache/scratchpkg/sources
+trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+if [ $UID != 0 ]; then
+	echo "$(basename $0) need run as root."
+	exit 3
+fi
+
+if [ -z $VENOM ]; then
+	echo "Venom source not define! Aborted."
+	exit 1
+else
+	case $VENOM in
+		*.txz)	rm -fr $VENOMSRC
+				mkdir -p $VENOMSRC
+				cleanvenomsrc=1
+				echo "Extracting $VENOM..."
+				tar xf $VENOM -C $VENOMSRC;;
+		*)		VENOMSRC=$VENOM;;
+	esac
+fi
 
 # install pkgs
-chroot_run scratch sync
-chroot_run scratch sysup --no-confirm
-
-# umount binded cache
-umount $WDIR/var/cache/scratchpkg/sources
-umount $WDIR/var/cache/scratchpkg/packages
+mountbind_cache
+chroot_run scratch sync || die
+chroot_run scratch sysup --no-confirm --no-backup || die
+chroot_run pkgbase linux scratchpkg dhcpcd rc sysklogd || die
+#chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
+umountbind_cache
 
 # generate initrd
 #kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-#chroot_run mkinitramfs -k $kernver -o /boot/initrd-venom.img
+#chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
+#cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
 
-rm -f venomlinux-$DATE.txz
-pushd $WDIR >/dev/null
+# make rootfs
+rm -f $OUTPUT
+pushd $VENOMSRC >/dev/null
 
 tar --exclude="var/cache/scratchpkg/packages/*" \
 	--exclude="var/cache/scratchpkg/sources/*" \
 	--exclude="*.spkgnew" \
 	--exclude="tmp/*" \
-	-cvJpf $CWD/venomlinux-$DATE.txz $selecteddir
-	
+	-cvJpf $CWD/$OUTPUT $selecteddir || die "Failed create rootfs image."
+
 popd >/dev/null
+		
+cleanup
 
 exit 0
