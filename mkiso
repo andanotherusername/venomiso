@@ -60,6 +60,22 @@ umountbind_cache() {
 	umount $VENOMSRC/var/cache/scratchpkg/packages &>/dev/null
 }
 
+fetch() {
+	local filename
+	filename=$(basename $ROOTFSURL)
+	rm -f $filename
+	if [ -f $filename.part ]; then
+		wget -c --output-document=$filename.part $ROOTFSURL
+	else
+		wget --output-document=$filename.part $ROOTFSURL
+	fi
+	if [ $? != 0 ]; then
+		return 1
+	else
+		mv $filename.part $filename
+	fi
+}
+
 usage() {
 	cat << EOF
 Usage:
@@ -80,22 +96,6 @@ Note:
   if not define, it will download prebuilt one
   
 EOF
-}
-
-fetch() {
-	local filename
-	filename=$(basename $ROOTFSURL)
-	rm -f $filename
-	if [ -f $filename.part ]; then
-		wget -c --output-document=$filename.part $ROOTFSURL
-	else
-		wget --output-document=$filename.part $ROOTFSURL
-	fi
-	if [ $? != 0 ]; then
-		return 1
-	else
-		mv $filename.part $filename
-	fi
 }
 
 checkinput() {
@@ -182,7 +182,7 @@ fi
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 if [ $UID != 0 ]; then
-	echo "$(basename $0) need run as root."
+	printerror "$(basename $0) need run as root."
 	exit 3
 fi
 
@@ -259,7 +259,7 @@ xorriso -as mkisofs \
 		-o $OUTPUT \
 		$WDIR || die "failed create iso"
 
-printstep "Cleaning up..."	
+printstep "Cleaning up..."
 cleanup
 
 exit 0
