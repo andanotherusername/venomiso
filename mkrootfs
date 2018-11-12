@@ -9,11 +9,19 @@ cleanup() {
 }
 
 die() {
-	[ "$@" ] && echo "ERROR: $@"
+	[ "$@" ] && printerror $@
 	umount_pseudofs
 	umountbind_cache
 	cleanup
 	exit 1
+}
+
+printstep() {
+	echo -e "\e[0;36m::\e[0m $@"
+}
+
+printerror() {
+	echo -e "\e[0;31mERROR:\e[0m $@"
 }
 
 chroot_run() {
@@ -51,6 +59,22 @@ umountbind_cache() {
 	umount $VENOMSRC/var/cache/scratchpkg/packages &>/dev/null
 }
 
+fetch() {
+	local filename
+	filename=$(basename $ROOTFSURL)
+	rm -f $filename
+	if [ -f $filename.part ]; then
+		wget -c --output-document=$filename.part $ROOTFSURL
+	else
+		wget --output-document=$filename.part $ROOTFSURL
+	fi
+	if [ $? != 0 ]; then
+		return 1
+	else
+		mv $filename.part $filename
+	fi
+}
+
 usage() {
 	cat << EOF
 Usage:
@@ -60,11 +84,12 @@ Options:
   -p <path>           set packages cache directory
   -s <path>           set sources cache directory
   -P <pkg1 pkgN ...>  package to install into iso
-  -o <name.iso>       output name for iso
+  -o <name.txz>       output name for rootfs
   -h                  show this help msg
   
 Note:
   'venom source' should be a rootfs directory or rootfs tarball image
+  if not define, it will download prebuilt one
   
 EOF
 }
@@ -106,6 +131,7 @@ parseopt() {
 
 CWD=$PWD
 VENOMSRC=/tmp/venomrootfs
+ROOTFSURL="https://github.com/emmett1/venom/releases/download/rootfs/venom-rootfs.txz"
 
 selecteddir="bin dev home lib64 mnt proc run srv tmp var boot etc lib media opt root sbin sys usr"
 
@@ -116,36 +142,42 @@ PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
 SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
 
 if [ "$(echo ${OUTPUT##*.})" != "txz" ]; then
-	echo "output name should be .txz extension"
+	printerror "output name should be .txz extension"
 	exit 1
 fi
 
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 if [ $UID != 0 ]; then
-	echo "$(basename $0) need run as root."
+	printerror "$(basename $0) need run as root."
 	exit 3
 fi
 
 if [ -z $VENOM ]; then
-	echo "Venom source not define! Aborted."
-	exit 1
-else
-	case $VENOM in
-		*.txz)	rm -fr $VENOMSRC
-				mkdir -p $VENOMSRC
-				cleanvenomsrc=1
-				echo "Extracting $VENOM..."
-				tar xf $VENOM -C $VENOMSRC;;
-		*)		VENOMSRC=$VENOM;;
-	esac
+	if [ ! -f $(basename $ROOTFSURL) ]; then
+		printstep "Fetching $(basename $ROOTFSURL)..."
+		fetch $ROOTFSURL || die "failed downloading $(basename $ROOTFSURL)"
+	fi
+	VENOM=$(basename $ROOTFSURL)
 fi
+
+case $VENOM in
+	*.txz)	rm -fr $VENOMSRC
+			mkdir -p $VENOMSRC
+			cleanvenomsrc=1
+			printstep "Extracting $VENOM..."
+			tar xf $VENOM -C $VENOMSRC || die "failed extracting $VENOM";;
+	*)		VENOMSRC=$VENOM;;
+esac
 
 # install pkgs
 mountbind_cache
-chroot_run scratch sync || die
-chroot_run scratch sysup --no-confirm --no-backup || die
-chroot_run pkgbase linux scratchpkg dhcpcd rc sysklogd || die
+printstep "Updating ports..."
+chroot_run scratch sync || die "failed updating ports"
+printstep "Upgrading system..."
+chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
+printstep "Strip down system to base..."
+chroot_run pkgbase linux || die "failed remove packages..."
 #chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
@@ -155,6 +187,7 @@ umountbind_cache
 #cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
 
 # make rootfs
+printstep "Creating rootfs ($OUTPUT)"
 rm -f $OUTPUT
 pushd $VENOMSRC >/dev/null
 
@@ -165,7 +198,8 @@ tar --exclude="var/cache/scratchpkg/packages/*" \
 	-cvJpf $CWD/$OUTPUT $selecteddir || die "Failed create rootfs image."
 
 popd >/dev/null
-		
+	
+printstep "Cleaning up..."	
 cleanup
 
 exit 0
