@@ -128,6 +128,16 @@ VENOMSRC=/tmp/venomrootfs
 isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
 isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
 
+if [ ! $(type -p xorriso ) ]; then
+	echo "'libisoburn' not installed."
+	exit 1
+fi
+
+if [ ! $(type -p mksquashfs ) ]; then
+	echo "'squashfs-tools' not installed."
+	exit 1
+fi
+
 parseopt $@
 
 if [ "$PRESET" ] && [ -f "$PRESET" ]; then
