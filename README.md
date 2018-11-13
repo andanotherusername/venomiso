@@ -12,11 +12,13 @@ Host:
 * squashfs-tools (to create venom squasfs filesystem for the iso)
 * libisoburn (use xorriso to create iso)
 
-Venom rootfs (if you modified it):
+Venom rootfs (incase you modified it):
 
 * [mkinitramfs](https://github.com/emmett1/mkinitramfs) (to create initrd)
 * [scratchpkg](https://github.com/emmett1/scratchpkg) (to install/upgrade package before create the iso)
+* [rc](https://github.com/emmett1/rc) (init system used by Venom Linux)
 * squashfs-tools (to unsquash venom filesystem to disk while installing)
+* dialog (required by the installer)
 
 Note: squashfs-tools and dialog will get installed by default before the iso is created, it needed for the installer.
 
@@ -97,6 +99,16 @@ Create the image tarball using custom packages path (its save you compile time, 
     
     # ./mkrootfs -p /path/to/packagedir
     
- 
+### Some notes
+
+* default password for 'root' is 'root' and default user is 'venom' with password 'venom'.
+* you can change default password and user in 'virootfs/root/custom_script.sh' file.
+* 'virootfs' directory will included into the iso and will copy over to live environment before swith_root.
+* if you need customize the live environment, make change in the 'virootfs' directory, assume 'virootfs' as overlay in live environment.
+* 'virootfs/root/custom_script.sh' script will get execute after get copied over to live environment and before switch_root.
+* if you want customize 'custom_script.sh', keep in mind, '/' in 'custom_script.sh' is '/' in live environment.
+* the installer is included in the iso, so the iso you created is installable, run 'venom-installer' to start the installer.
+
 ** These scripts is still work in progress but its quite usable now. Things may change from time to time.
+
     
