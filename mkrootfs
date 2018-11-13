@@ -83,7 +83,6 @@ Usage:
 Options:
   -p <path>           set packages cache directory
   -s <path>           set sources cache directory
-  -P <pkg1 pkgN ...>  package to install into iso
   -o <name.txz>       output name for rootfs
   -h                  show this help msg
   
