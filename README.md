@@ -54,7 +54,7 @@ Create venom iso with some extra package
     
 Create venom iso using your own created initrd/kernel (make sure you know what you doing)
 
-    # ./mkiso -i /path/to/initrd -k /oath/to/kernel
+    # ./mkiso -i /path/to/initrd -k /path/to/kernel
     
 Create venom iso using preset file
 
@@ -66,7 +66,13 @@ Create venom iso using existing venom rootfs
     
 Create venom iso using custom packages path (its save you compile time, if you already use Venom Linux as host OS :D)
     
-    # ./mkrootfs -p /path/to/packagedir
+    # ./mkiso -p /path/to/packagedir
+    
+You can use these options altogether example:
+
+    # ./mkiso -p /var/cache/packages -s /var/cache/sources -P xorg xfce4 lxdm -o venom-xfce4-custom.iso
+    
+Note: Be careful when adding custom packages, adding non-existing packages may cause build error. Look [here](https://github.com/emmett1/ports) for exist custom packages.
     
 #### Preset
 
