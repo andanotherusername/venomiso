@@ -4,3 +4,5 @@ vmlinuz*
 *.iso
 *.txz
 cache*
+*.part
+
