@@ -227,13 +227,21 @@ umountbind_cache
 
 # copy kernel
 printstep "Preparing kernel for iso..."
-cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz || die "failed copying kernel"
+if [ $KERNEL_FILE ]; then
+	cp $KERNEL_FILE $WDIR/boot/vmlinuz || die "failed copying kernel"
+else
+	cp $VENOMSRC/boot/vmlinuz-venom $WDIR/boot/vmlinuz || die "failed copying kernel"
+fi
 
 # generate initrd
 printstep "Preparing initrd for iso..."
-kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
-cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
+if [ $INITRD_FILE ]; then
+	cp $INITRD_FILE $WDIR/boot/initrd || die "failed copying initrd"
+else
+	kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
+	chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
+	cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
+fi
 
 # make sfs
 printstep "Squashing root filesystem..."
