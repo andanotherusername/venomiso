@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 
 interrupted() {
 	die "Abort by user."
@@ -27,7 +27,9 @@ printerror() {
 chroot_run() {
 	mount_pseudofs
 	chroot $VENOMSRC $@
+	retval=$?
 	umount_pseudofs
+	return $retval
 }
 
 mount_pseudofs() {
@@ -173,10 +175,10 @@ esac
 mountbind_cache
 printstep "Updating ports..."
 chroot_run scratch sync || die "failed updating ports"
-printstep "Upgrading system..."
-chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
 printstep "Strip down system to base..."
 chroot_run pkgbase linux || die "failed remove packages..."
+printstep "Upgrading system..."
+chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
 printstep "Fix broken packages..."
 chroot_run revdep -r -n || die "failed fix broken packages..."
 #chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"

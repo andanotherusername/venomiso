@@ -28,7 +28,9 @@ printerror() {
 chroot_run() {
 	mount_pseudofs
 	chroot $VENOMSRC $@
+	retval=$?
 	umount_pseudofs
+	return $retval
 }
 
 mount_pseudofs() {
