@@ -11,8 +11,8 @@ cleanup() {
 
 die() {
 	[ "$@" ] && printerror $@
-	umount_pseudofs
 	umountbind_cache
+	umount_pseudofs
 	cleanup
 	exit 1
 }
