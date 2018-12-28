@@ -27,6 +27,7 @@ printerror() {
 
 chroot_run() {
 	mount_pseudofs
+	cp -L /etc/resolv.conf $VENOMSRC/etc/
 	chroot $VENOMSRC $@
 	retval=$?
 	umount_pseudofs
@@ -151,7 +152,7 @@ DISTRONAME="Venom Linux"
 LABEL=VenomLive
 REQ_PKGS="dialog squashfs-tools"
 VENOMSRC=/tmp/venomrootfs
-ROOTFSURL="https://github.com/emmett1/venom/releases/download/rootfs/venom-rootfs.txz"
+ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
 
 isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
 isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
