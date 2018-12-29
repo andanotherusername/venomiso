@@ -27,6 +27,10 @@ if [ $(type -p startxfce4) ]; then
 	SSN=$(type -p startxfce4)
 elif [ $(type -p mate-session) ]; then
 	SSN=$(type -p mate-session)
+elif [ $(type -p startlxde) ]; then
+	SSN=$(type -p mate-session)
+elif [ $(type -p startkde) ]; then
+	SSN=$(type -p mate-session)
 fi
 
 if [ -x $(type -p lxdm) ]; then
