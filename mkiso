@@ -19,6 +19,7 @@ die() {
 
 printstep() {
 	echo -e "\e[0;36m::\e[0m $@"
+	echo -en "\033]0;$@\a"
 }
 
 printerror() {
