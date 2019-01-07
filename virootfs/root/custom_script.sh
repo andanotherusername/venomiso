@@ -28,13 +28,12 @@ if [ $(type -p startxfce4) ]; then
 elif [ $(type -p mate-session) ]; then
 	SSN=$(type -p mate-session)
 elif [ $(type -p startlxde) ]; then
-	SSN=$(type -p mate-session)
+	SSN=$(type -p startlxde)
 elif [ $(type -p startkde) ]; then
-	SSN=$(type -p mate-session)
+	SSN=$(type -p startkde)
 fi
 
 if [ -x $(type -p lxdm) ]; then
-	#sed "s,# autologin=dgod,autologin=$USER," -i /etc/lxdm/lxdm.conf
 	sed "s,# session=/usr/bin/startlxde,session=$SSN," -i /etc/lxdm/lxdm.conf
 	#sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
 elif [ -x $(type -p lightdm) ]; then
@@ -70,14 +69,3 @@ for i in sysklogd dbus $DM $NETWORK bluetooth; do
 done
 
 echo "DAEMONS=(${daemon[@]})" >> /etc/rc.conf
-
-trigger /usr/bin/fc-cache -s
-trigger /usr/bin/gdk-pixbuf-query-loaders --update-cache
-trigger /usr/bin/gio-querymodules /usr/lib/gio/modules
-trigger /usr/bin/gio-querymodules-32 /usr/lib32/gio/modules
-trigger /usr/bin/glib-compile-schemas /usr/share/glib-2.0/schemas
-trigger /usr/bin/gtk-query-immodules-2.0 --update-cache
-trigger /usr/bin/gtk-query-immodules-3.0 --update-cache
-trigger /sbin/udevadm hwdb --update
-trigger /usr/bin/update-desktop-database --quiet
-trigger /usr/bin/update-mime-database /usr/share/mime

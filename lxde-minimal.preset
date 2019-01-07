@@ -1,0 +1,15 @@
+#
+# this file will get sourced by mkiso script
+#
+
+_de="lxde"
+_dm="lxdm"
+
+# set the output name
+OUTPUT="venom-lxde-minimal-1.0-$(date +"%Y%m%d").iso"
+
+# set extra packages need to include into iso
+EXTRA_PKGS="xorg xorg-video-drivers $_de $_dm pm-utils sudo firefox"
+EXTRA_PKGS="$EXTRA_PKGS liberation-fonts libmtp gvfs linux-firmware networkmanager"
+EXTRA_PKGS="$EXTRA_PKGS ntfs-3g rsync xdg-user-dirs network-manager-applet os-prober libwebp"
+

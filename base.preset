@@ -6,4 +6,4 @@
 OUTPUT="venom-base-1.0-$(date +"%Y%m%d").iso"
 
 # set extra packages need to include into iso
-EXTRA_PKGS="wpa_supplicant os-prober"
+EXTRA_PKGS="wpa_supplicant os-prober linux-firmware"

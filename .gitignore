@@ -2,6 +2,7 @@ initrd*
 vmlinuz*
 *.sfs*
 *.iso
+*.md5
 *.txz
 cache*
 *.part
