@@ -153,7 +153,7 @@ menu_partition() {
 		return
 	fi
 	for p in $(showpartition); do
-		psize=$(fdisk -l | grep ^$p | awk '{print $5}')
+		psize=$(fdisk -l | grep -w ^$p | awk '{print $5}')
 		fstype=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep $p | awk '{print $3}')
 		[ $fstype ] || fstype=none
 		partmenu="$partmenu $p size:$psize,fstype:$fstype"
@@ -190,7 +190,7 @@ menu_partition() {
 		_dialog --yesno "Swap partition found, do you want to use it?" $YESNOSIZE
 		if [ $? = 0 ]; then
 			for s in $(showswap); do
-				ssize=$(fdisk -l | grep ^$s | awk '{print $5}')
+				ssize=$(fdisk -l | grep -w ^$s | awk '{print $5}')
 				swapmenu="$swapmenu $s $ssize"
 			done
 			swap_var=$(_dialog --menu "Choose swap partition" 0 50 0 ${swapmenu})
@@ -199,12 +199,15 @@ menu_partition() {
 				_dialog --yesno "Format swap partition ($swap_var)?" $YESNOSIZE
 				if [ $? = 0 ]; then
 					format_swap=1
+				else
+					format_swap=
 				fi
 			else
 				format_swap=1
 			fi
 		else
 			swap_var=none
+			format_swap=
 		fi
 	else
 		swap_var=none
@@ -296,7 +299,7 @@ install_now() {
 	if [ -x $VENOMROOT/etc/rc.d/networkmanager ]; then
 		network=networkmanager
 	elif [ -x $VENOMROOT/etc/rc.d/network ]; then
-		network=networkmanager
+		network=network
 	fi
 	
 	if [ -x $VENOMROOT/etc/rc.d/lxdm ]; then
