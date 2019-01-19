@@ -130,6 +130,8 @@ parseopt() {
 			-c) checkinput $2
 				PRESET=$2
 				shift 2;;
+			-r) REVDEP="1"
+				shift 1;;
 			-P) checkinput $2
 				while [ "$2" ]; do
 					case $2 in
@@ -227,6 +229,13 @@ printstep "Upgrading system..."
 chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
 printstep "Installing requested packages..."
 chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
+
+# run revdep
+if [ "$REVDEP" = 1 ]; then
+	chroot_run revdep -r -n || die "failed revdep process"
+fi
+
+# unmount binded cache
 umountbind_cache
 
 # copy kernel
