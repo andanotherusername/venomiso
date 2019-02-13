@@ -279,6 +279,9 @@ xorriso -as mkisofs \
 		-boot-info-table \
 		-o $OUTPUT \
 		$WDIR || die "failed create iso"
+		
+printstep "Generate md5sum..."
+md5sum $OUTPUT > $OUTPUT.md5
 
 printstep "Cleaning up..."
 cleanup

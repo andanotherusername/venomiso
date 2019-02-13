@@ -202,6 +202,9 @@ tar --exclude="var/cache/scratchpkg/packages/*" \
 	-cvJpf $CWD/$OUTPUT $selecteddir || die "Failed create rootfs image."
 
 popd >/dev/null
+		
+printstep "Generate md5sum..."
+md5sum $OUTPUT > $OUTPUT.md5
 	
 printstep "Cleaning up..."	
 cleanup
