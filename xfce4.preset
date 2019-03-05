@@ -2,11 +2,11 @@
 # this file will get sourced by mkiso script
 #
 
-_de="mate mate-extra"
+_de="xfce4"
 _dm="lxdm"
 
 # set the output name
-OUTPUT="venom-mate-1.1-$(date +"%Y%m%d").iso"
+OUTPUT="venom-xfce4-1.1-$(date +"%Y%m%d").iso"
 
 # set extra packages need to include into iso
 EXTRA_PKGS="xorg xorg-video-drivers $_de $_dm pm-utils sudo scrot gimp firefox hexchat transmission-gtk"

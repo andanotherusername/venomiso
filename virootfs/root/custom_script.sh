@@ -1,12 +1,8 @@
 #!/bin/bash
 
-trigger() {
-	if [ $(type $1) ]; then
-		$@
-	else
-		return 0
-	fi
-}
+#
+# This script is executed inside initramfs using chroot to live environment
+#
 
 USER=venom
 PASSWORD=venom
