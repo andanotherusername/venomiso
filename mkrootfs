@@ -139,9 +139,16 @@ selecteddir="bin dev home lib64 mnt proc run srv tmp var boot etc lib media opt 
 
 parseopt $@
 
-OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").txz}
 PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
 SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
+
+if [ "$OUTPUT" ]; then
+	OUTPUT=$OUTPUT
+elif [ ! -f "venom-rootfs.txz" ]; then
+	OUTPUT=venom-rootfs.txz
+else
+	OUTPUT=$(date +"%Y%m%d").txz
+fi
 
 if [ "$(echo ${OUTPUT##*.})" != "txz" ]; then
 	printerror "output name should be .txz extension"
