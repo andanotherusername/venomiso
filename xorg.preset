@@ -3,7 +3,7 @@
 #
 
 # set the output name
-OUTPUT="venom-xorg-1.1-$(date +"%Y%m%d").iso"
+OUTPUT="venom-xorg-$(date +"%Y%m%d").iso"
 
 # set extra packages need to include into iso
 EXTRA_PKGS="xorg xorg-video-drivers os-prober linux-firmware"

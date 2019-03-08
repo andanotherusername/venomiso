@@ -6,7 +6,7 @@ _de="xfce4"
 _dm="lxdm"
 
 # set the output name
-OUTPUT="venom-xfce4-1.1-$(date +"%Y%m%d").iso"
+OUTPUT="venom-xfce4-$(date +"%Y%m%d").iso"
 
 # set extra packages need to include into iso
 EXTRA_PKGS="xorg xorg-video-drivers $_de $_dm pm-utils sudo scrot gimp firefox hexchat transmission-gtk"

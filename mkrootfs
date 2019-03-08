@@ -147,7 +147,7 @@ if [ "$OUTPUT" ]; then
 elif [ ! -f "venom-rootfs.txz" ]; then
 	OUTPUT=venom-rootfs.txz
 else
-	OUTPUT=$(date +"%Y%m%d").txz
+	OUTPUT=venom-$(date +"%Y%m%d").txz
 fi
 
 if [ "$(echo ${OUTPUT##*.})" != "txz" ]; then
