@@ -14,7 +14,7 @@ _dialog() {
 }
 
 print_msg() {
-	_dialog --msgbox "$@" 8 60
+	_dialog --clear --msgbox "$@" 8 60
 }
 
 _exit() {
@@ -276,17 +276,23 @@ install_now() {
 			reiserfs) mkreiserfs -q $partition_var &>/dev/null ;;
 			btrfs) mkfs.btrfs -f $partition_var &>/dev/null ;;
 		esac
+		if [ $? != 0 ]; then
+			print_error_msg "Failed create '$filesystem_var' filesystem on '$partition_var'"
+		fi
 	fi
 	
 	# make swap
 	if [ "$format_swap" = 1 ] && [ "$swap_var" ]; then
 		_dialog --infobox "Formatting partition $swap_var to swap" 3 50
 		mkswap $swap_var &>/dev/null
+		if [ $? != 0 ]; then
+			print_error_msg "Failed create 'swap' on '$swap_var'"
+		fi
 	fi
 	
 	rm -fr $VENOMROOT
 	mkdir -p $VENOMROOT
-	mount $partition_var $VENOMROOT
+	mount $partition_var $VENOMROOT || print_error_msg "Error mount '$partition_var'"
 	
 	totalsfs=$(unsquashfs -l $ROOTSFS | wc -l)
 	countsfs=0
@@ -346,43 +352,31 @@ $partition_var      /            $filesystem_var     defaults            1     1
 # End /etc/fstab" >> $VENOMROOT/etc/fstab
 	
 	_dialog --infobox "Creating user ($user_var)..." 3 50
-	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var
-	echo "$user_var:$passwd" | chpasswd -R $VENOMROOT -c SHA512
-	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512
+	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var || print_error_msg "Error configure user '$user_var'"
+	echo "$user_var:$passwd" | chpasswd -R $VENOMROOT -c SHA512 || print_error_msg "Error setting user password"
+	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512 || print_error_msg "Error setting root password"
 	
 	_dialog --infobox "Generating locales (en_US.UTF-8)..." 3 50
 	sed 's/#\(en_US\.UTF-8\)/\1/' -i $VENOMROOT/etc/locales
 	run_chroot genlocales &>/dev/null
 	
 	_dialog --infobox "Generating initramfs..." 3 50
-	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null
+	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
 
 	if [ "$grub_var" != SKIP ]; then
 		_dialog --infobox "Installing grub..." 3 50
-		run_chroot grub-install $grub_var &>/dev/null
-		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null
+		run_chroot grub-install $grub_var &>/dev/null || print_error_msg "Error installing grub"
+		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null || print_error_msg "Error generating grub config"
 	fi
-	
-	#_dialog --infobox "Trigger required hook..." 3 50
-	#trigger /usr/bin/fc-cache -s
-	#trigger /usr/bin/gdk-pixbuf-query-loaders --update-cache
-	#trigger /usr/bin/gio-querymodules /usr/lib/gio/modules
-	#trigger /usr/bin/gio-querymodules-32 /usr/lib32/gio/modules
-	#trigger /usr/bin/glib-compile-schemas /usr/share/glib-2.0/schemas
-	#trigger /usr/bin/gtk-query-immodules-2.0 --update-cache
-	#trigger /usr/bin/gtk-query-immodules-3.0 --update-cache
-	#trigger /sbin/udevadm hwdb --update
-	#trigger /usr/bin/update-desktop-database --quiet
-	#trigger /usr/bin/update-mime-database /usr/share/mime
 	
 	umount $VENOMROOT
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
+	exit 0
 }
 
-trigger() {
-	if [ -x $VENOMROOTFS/$1 ]; then
-		run_chroot $@
-	fi
+print_error_msg() {
+	print_msg "$@"
+	exit 1
 }
 
 mount_pseudofs() {
@@ -404,7 +398,9 @@ umount_pseudofs() {
 run_chroot() {
 	mount_pseudofs
 	chroot $VENOMROOT "$@"
+	retval=$?
 	umount_pseudofs
+	return $retval
 }
 
 menu() {
