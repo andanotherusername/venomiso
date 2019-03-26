@@ -369,6 +369,10 @@ $partition_var      /            $filesystem_var     defaults            1     1
 		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null || print_error_msg "Error generating grub config"
 	fi
 	
+	_dialog --infobox "Removing temporary packages..." 3 50
+	run_chroot pkgdel dialog &>/dev/null
+	run_chroot pkgdel squashfs-tools &>/dev/null
+	
 	umount $VENOMROOT
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
 	exit 0
