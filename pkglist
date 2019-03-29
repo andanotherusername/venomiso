@@ -30,7 +30,6 @@ rsync
 xdg-user-dirs
 network-manager-applet
 os-prober
-libwebp
 blueman
 btrfs-progs
 reiserfsprogs

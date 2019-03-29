@@ -11,13 +11,13 @@
 #
 
 MUST_PKG="wpa_supplicant os-prober linux-firmware btrfs-progs reiserfsprogs xfsprogs" # must have pkg in the iso
-XORG_PKG="xorg xorg-video-drivers xf86-input-libinput harfbuzz"                       # xorg stuff in the iso
+XORG_PKG="xorg xorg-video-drivers xf86-input-libinput"                       # xorg stuff in the iso
 EXTRA_PKG="$(cat pkglist | grep -v ^#)"                                               # extra stuff in the iso, read from 'pkglist' file in current dir
 
 PKG_DIR="/mnt/data/venom/packages-dev/"   # prebuilt pkg path in host
 SRC_DIR="/mnt/data/venom/sources/"        # source path in host
 
-BUILD_CMD="sudo ./mkiso -p $PKG_DIR -s $SRC_DIR" # cmd used by 'mkiso' script
+BUILD_CMD="sudo ./mkiso -r -p $PKG_DIR -s $SRC_DIR" # cmd used by 'mkiso' script
 
 if [ "$*" ]; then
 	while [ "$1" ]; do
