@@ -232,7 +232,7 @@ chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "
 
 # run revdep
 if [ "$REVDEP" = 1 ]; then
-	chroot_run revdep -r -n || die "failed revdep process"
+	chroot_run revdep -r -y || die "failed revdep process"
 fi
 
 # unmount binded cache

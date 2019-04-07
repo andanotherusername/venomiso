@@ -188,7 +188,7 @@ chroot_run pkgbase linux || die "failed remove packages..."
 printstep "Upgrading system..."
 chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
 printstep "Fix broken packages..."
-chroot_run revdep -r -n || die "failed fix broken packages..."
+chroot_run revdep -r -y || die "failed fix broken packages..."
 #chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
