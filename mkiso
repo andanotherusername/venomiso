@@ -226,9 +226,9 @@ mountbind_cache
 printstep "Updating ports..."
 chroot_run scratch sync || die "failed updating ports"
 printstep "Upgrading system..."
-chroot_run scratch sysup --no-confirm --no-backup || die "failed system upgrade"
+chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Installing requested packages..."
-chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
+chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS -y || die "failed install packages"
 
 # run revdep
 if [ "$REVDEP" = 1 ]; then
