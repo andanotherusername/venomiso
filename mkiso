@@ -337,35 +337,18 @@ rm -fr $WDIR/boot/efiboot
 
 printstep "Creating iso ($OUTPUT)..."
 rm -f $OUTPUT
-xorriso -as mkisofs -R -l -J \
-	-o $OUTPUT \
-	-A Venom \
-	-b isolinux/isolinux.bin \
-	-c isolinux/boot.cat \
-	-no-emul-boot \
-	-boot-load-size 4 \
-	-boot-info-table \
-	-eltorito-alt-boot \
-	-e boot/efiboot.img \
-	-no-emul-boot \
-	-input-charset utf-8 \
-	-V "$LABEL" $WDIR || die "failed create iso"
-	
-isohybrid -u $OUTPUT
-
-#xorriso -as mkisofs \
-		#-r -J -joliet-long \
-		#-l -cache-inodes \
-		#-isohybrid-mbr $CWD/isolinux/isohdpfx.bin \
-		#-partition_offset 16 \
-		#-volid "$LABEL" \
-		#-b isolinux/isolinux.bin \
-		#-c isolinux/boot.cat \
-		#-no-emul-boot \
-		#-boot-load-size 4 \
-		#-boot-info-table \
-		#-o $OUTPUT \
-		#$WDIR || die "failed create iso"
+xorriso -as mkisofs \
+    -isohybrid-mbr $CWD/isolinux/isohdpfx.bin \
+    -c isolinux/boot.cat \
+    -b isolinux/isolinux.bin \
+      -no-emul-boot \
+      -boot-load-size 4 \
+      -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/efiboot.img \
+      -no-emul-boot \
+      -isohybrid-gpt-basdat \
+    -o $OUTPUT $WDIR || die "failed create iso"
 		
 printstep "Generate md5sum..."
 md5sum $OUTPUT > $OUTPUT.md5
