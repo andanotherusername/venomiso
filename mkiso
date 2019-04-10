@@ -242,6 +242,7 @@ chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS -y || die "failed ins
 
 # run revdep
 if [ "$REVDEP" = 1 ]; then
+	printstep "Check broken packages..."
 	chroot_run revdep -r -y || die "failed revdep process"
 fi
 
@@ -348,6 +349,7 @@ xorriso -as mkisofs \
     -e boot/efiboot.img \
       -no-emul-boot \
       -isohybrid-gpt-basdat \
+      -volid $LABEL \
     -o $OUTPUT $WDIR || die "failed create iso"
 		
 printstep "Generate md5sum..."
