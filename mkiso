@@ -325,7 +325,7 @@ menuentry "Boot Venom Linux (UEFI mode) debug" {
     initrd /boot/initrd
 }
 EOF
-grub-mkimage-efi -c $WDIR/boot/grub-early.cfg -o $WDIR/boot/EFI/$GRUB_EFI_IMG -O ${GRUB_EFI_ARCH}-efi -p "" iso9660 normal search search_fs_file
+grub-mkimage -c $WDIR/boot/grub-early.cfg -o $WDIR/boot/EFI/$GRUB_EFI_IMG -O ${GRUB_EFI_ARCH}-efi -p "" iso9660 normal search search_fs_file
 modprobe loop
 dd if=/dev/zero of=$WDIR/boot/efiboot.img count=4096
 mkdosfs -n VENOM-UEFI $WDIR/boot/efiboot.img || die "Failed mkdosfs"

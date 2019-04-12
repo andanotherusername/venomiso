@@ -408,7 +408,7 @@ DAEMONS=(${daemon[@]})
 	if [ "$grub_var" != SKIP ]; then
 		if [ $EFI_SYSTEM = 1 ]; then
 			_dialog --infobox "Installing grub (EFI)..." 3 50
-			run_chroot grub-install-efi --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $grub_var &>/dev/null || print_error_msg "Error installing grub"
+			run_chroot grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $grub_var &>/dev/null || print_error_msg "Error installing grub"
 			if [ "$(cat /proc/cpuinfo | grep hypervisor)" ]; then
 				mkdir -p $VENOMROOT/boot/efi/EFI/BOOT
 				cp $VENOMROOT/boot/efi/EFI/venom_grub/grubx64.efi $VENOMROOT/boot/efi/EFI/BOOT/BOOTX64.EFI
