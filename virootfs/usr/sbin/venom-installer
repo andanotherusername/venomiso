@@ -8,6 +8,12 @@ HEIGHT=10
 VENOMROOT="/tmp/venominstall"
 ROOTSFS="/lib/initramfs/medium/filesystem/root.sfs"
 
+EFI_SYSTEM=0
+
+if [ -e /sys/firmware/efi/systab ]; then
+	EFI_SYSTEM=1
+fi
+
 _dialog() {
 	dialog --no-mouse "$@" 3>&1 1>&2 2>&3
 	return $?
@@ -123,9 +129,15 @@ showswap() {
 	echo $swap
 }
 
+showefi() {
+	local efi
+	efi=$(fdisk -l | grep ^\/dev | grep EFI | awk '{print $1}')
+	echo $efi
+}
+
 showpartition() {
 	local part
-	part=$(fdisk -l | grep ^\/dev | grep -Ev '(swap|Extended)' | awk '{print $1}')
+	part=$(fdisk -l | grep ^\/dev | grep -Ev '(swap|Extended|EFI|BIOS)' | awk '{print $1}')
 	echo $part
 }
 
@@ -135,6 +147,12 @@ menu_partition() {
 	local partmenu
 	local s
 	local swapmenu
+
+	_dialog --clear --title "  Partitioning Tips  " --msgbox "\n
+For BIOS systems, MBR or GPT partition tables are supported.
+To use GPT partition in BIOS system 1MB partition must be created and set as 'BIOS boot'.\n\n
+For EFI systems, GPT partition is required and a FAT32 partition with at least 100MB set as 'EFI System'
+must be created. This partition will be used as 'EFI System Partition' with '/boot/efi' as mountpoint." 14 70
 	
 	_dialog --yesno "Run cfdisk to partition disk?" $YESNOSIZE
 	if [ $? = 0 ]; then
@@ -186,6 +204,16 @@ menu_partition() {
 		filesystem_var=
 	fi
 
+	if [ $EFI_SYSTEM = 1 ]; then
+		if [[ $(showefi) ]]; then
+			for e in $(showefi); do
+				ssize=$(fdisk -l | grep -w ^$e | awk '{print $5}')
+				efimenu="$efimenu $e $ssize"
+			done
+			efi_var=$(_dialog --menu "Choose EFI partition" 0 50 0 ${efimenu})
+		fi
+	fi
+
 	if [[ $(showswap) ]]; then
 		_dialog --yesno "Swap partition found, do you want to use it?" $YESNOSIZE
 		if [ $? = 0 ]; then
@@ -206,12 +234,12 @@ menu_partition() {
 				format_swap=1
 			fi
 		else
-			swap_var=none
+			swap_var=SKIP
 			format_swap=
 		fi
 	else
-		swap_var=none
-	fi		
+		swap_var=SKIP
+	fi
 }
 
 menu_bootloader() {
@@ -240,7 +268,8 @@ Hostname  : $hostname_var
 User      : $user_var
 UserPswd  : $([ $passwd ] && echo -done-)
 Rootpswd  : $([ $rootpasswd ] && echo -done-)
-Partition : $partition_var $filesystem_var
+Root      : $partition_var $filesystem_var
+EFI       : $([ $EFI_SYSTEM != 1 ] && echo SKIP || echo $efi_var)
 Swap      : $swap_var $([ $format_swap = 1 ] && echo re-format)
 Grub      : $grub_var
 " 0 0
@@ -263,6 +292,9 @@ install_now() {
 		return
 	fi
 	
+	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
+	mountpoint -q $VENOMROOT && umount $VENOMROOT
+	
 	_dialog --yesno "Continue with installation?" $YESNOSIZE
 	
 	# format partition
@@ -280,6 +312,12 @@ install_now() {
 			print_error_msg "Failed create '$filesystem_var' filesystem on '$partition_var'"
 		fi
 	fi
+
+	# make EFI partition
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		_dialog --infobox "Formatting partition $efi_var to fat32" 3 50
+		mkfs.vfat -F32 $efi_var &>/dev/null || print_error_msg "Failed create fat32 filesystem on $efi_var"
+	fi
 	
 	# make swap
 	if [ "$format_swap" = 1 ] && [ "$swap_var" ]; then
@@ -292,7 +330,14 @@ install_now() {
 	
 	rm -fr $VENOMROOT
 	mkdir -p $VENOMROOT
+
 	mount $partition_var $VENOMROOT || print_error_msg "Error mount '$partition_var'"
+
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		mkdir -p $VENOMROOT/boot/efi || print_error_msg "Error create '$VENOMROOT/boot/efi' directory"
+		mount $efi_var $VENOMROOT/boot/efi || print_error_msg "Error mount '$efi_var'"
+	fi
+		
 	
 	totalsfs=$(unsquashfs -l $ROOTSFS | wc -l)
 	countsfs=0
@@ -337,19 +382,16 @@ DAEMONS=(${daemon[@]})
 " > $VENOMROOT/etc/rc.conf
 
 	# fstab
-	echo "# Begin /etc/fstab
+	echo "# <device> <dir> <type> <options> <dump> <fsck>" > $VENOMROOT/etc/fstab
+	echo "$partition_var / $filesystem_var defaults 1 1" >> $VENOMROOT/etc/fstab
 
-# file system  mount-point  type     options             dump  fsck
-#                                                              order
-
-$partition_var      /            $filesystem_var     defaults            1     1" > $VENOMROOT/etc/fstab
-
-	if [ $swap_var != none ]; then
-		echo "$swap_var      swap         swap     pri=1               0     0" >> $VENOMROOT/etc/fstab
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		echo "$efi_var /boot/efi vfat defaults 0 2" >> $VENOMROOT/etc/fstab
 	fi
 
-	echo "
-# End /etc/fstab" >> $VENOMROOT/etc/fstab
+	if [ $swap_var != SKIP ]; then
+		echo "$swap_var swap swap pri=1 0 0" >> $VENOMROOT/etc/fstab
+	fi
 	
 	_dialog --infobox "Creating user ($user_var)..." 3 50
 	useradd -R $VENOMROOT -m -G users,wheel,audio,video -s /bin/bash $user_var || print_error_msg "Error configure user '$user_var'"
@@ -364,8 +406,18 @@ $partition_var      /            $filesystem_var     defaults            1     1
 	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
 
 	if [ "$grub_var" != SKIP ]; then
-		_dialog --infobox "Installing grub..." 3 50
-		run_chroot grub-install $grub_var &>/dev/null || print_error_msg "Error installing grub"
+		if [ $EFI_SYSTEM = 1 ]; then
+			_dialog --infobox "Installing grub (EFI)..." 3 50
+			run_chroot grub-install-efi --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $grub_var &>/dev/null || print_error_msg "Error installing grub"
+			if [ "$(cat /proc/cpuinfo | grep hypervisor)" ]; then
+				mkdir -p $VENOMROOT/boot/efi/EFI/BOOT
+				cp $VENOMROOT/boot/efi/EFI/venom_grub/grubx64.efi $VENOMROOT/boot/efi/EFI/BOOT/BOOTX64.EFI
+			fi
+		else
+			_dialog --infobox "Installing grub..." 3 50
+			run_chroot grub-install $grub_var &>/dev/null || print_error_msg "Error installing grub"
+		fi
+		_dialog --infobox "Generating grub config..." 3 50
 		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null || print_error_msg "Error generating grub config"
 	fi
 	
@@ -373,13 +425,16 @@ $partition_var      /            $filesystem_var     defaults            1     1
 	run_chroot pkgdel dialog &>/dev/null
 	run_chroot pkgdel squashfs-tools &>/dev/null
 	
-	umount $VENOMROOT
+	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
+	mountpoint -q $VENOMROOT && umount $VENOMROOT
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
 	exit 0
 }
 
 print_error_msg() {
 	print_msg "$@"
+	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
+	mountpoint -q $VENOMROOT && umount $VENOMROOT
 	exit 1
 }
 
@@ -388,14 +443,24 @@ mount_pseudofs() {
 	mount -t devpts devpts $VENOMROOT/dev/pts -o gid=5,mode=620
 	mount -t proc proc $VENOMROOT/proc
 	mount -t sysfs sysfs $VENOMROOT/sys
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		mount --bind /sys/firmware/efi/efivars $VENOMROOT/sys/firmware/efi/efivars
+	fi
 	mount -t tmpfs tmpfs $VENOMROOT/run
+	# workaround on stupid 'WARNING: Device /dev/XXXX not initialized in udev database even after waiting 10000000 microseconds.'
+	mkdir -p $VENOMROOT/run/udev
+	mount --bind /run/udev $VENOMROOT/run/udev
 }
 
 umount_pseudofs() {
 	umount $VENOMROOT/dev/pts
 	umount $VENOMROOT/dev
+	umount $VENOMROOT/run/udev
 	umount $VENOMROOT/run
 	umount $VENOMROOT/proc
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		umount $VENOMROOT/sys/firmware/efi/efivars
+	fi
 	umount $VENOMROOT/sys
 }
 
@@ -416,7 +481,7 @@ Set necessary options before start the installation \n"
 	
 	mainmenu=$(_dialog --default-item $DEFITEM \
 			--cancel-label "Exit" \
-			--title "  Venom Linux installer  " \
+			--title "  Venom Linux installer $([ "$EFI_SYSTEM" = 1 ] && echo '- UEFI') " \
 			--menu "$MAINMSG" 0 70 0 \
 			"Keyboard" "Set Keyboard" \
 			"Partition" "Partition disk" \
