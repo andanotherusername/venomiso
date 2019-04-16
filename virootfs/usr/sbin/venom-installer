@@ -403,7 +403,10 @@ DAEMONS=(${daemon[@]})
 	run_chroot genlocales &>/dev/null
 	
 	_dialog --infobox "Generating initramfs..." 3 50
-	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
+	run_chroot mkinitramfs -a -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
+	
+	_dialog --infobox "Generating initramfs (fallback)..." 3 50
+	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom-fallback.img &>/dev/null || print_error_msg "Error generating initramfs"
 
 	if [ "$grub_var" != SKIP ]; then
 		if [ $EFI_SYSTEM = 1 ]; then
