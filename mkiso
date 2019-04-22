@@ -160,6 +160,11 @@ ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
 isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
 isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
 
+if [ $UID != 0 ]; then
+	printerror "$(basename $0) need run as root."
+	exit 3
+fi
+
 if [ ! $(type -p xorriso ) ]; then
 	printerror "'libisoburn' not installed."
 	exit 1
@@ -196,11 +201,6 @@ if [ "$(echo ${OUTPUT##*.})" != "iso" ]; then
 fi
 
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
-
-if [ $UID != 0 ]; then
-	printerror "$(basename $0) need run as root."
-	exit 3
-fi
 
 if [ -z $VENOM ]; then
 	if [ ! -f $(basename $ROOTFSURL) ]; then
