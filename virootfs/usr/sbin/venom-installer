@@ -305,13 +305,13 @@ install_now() {
 	if [ "$partformat" = 1 ]; then
 		_dialog --infobox "Formatting partition $partition_var to $filesystem_var" 3 50
 		case $filesystem_var in
-			ext4|ext3|ext2) mkfs.$filesystem_var -F $partition_var &>/dev/null
+			ext4|ext3|ext2) mkfs.$filesystem_var -F -L Venom $partition_var &>/dev/null
 			      PKGKEEP+=" e2fsprogs" ;;
-			xfs) mkfs.xfs -f -m crc=0 $partition_var &>/dev/null
+			xfs) mkfs.xfs -f -m crc=0 -L Venom $partition_var &>/dev/null
 			       PKGKEEP+=" xfsprogs" ;;
-			reiserfs) mkreiserfs -q $partition_var &>/dev/null
+			reiserfs) mkreiserfs -q -l Venom $partition_var &>/dev/null
 			       PKGKEEP+=" reiserfsprogs" ;;
-			btrfs) mkfs.btrfs -f $partition_var &>/dev/null
+			btrfs) mkfs.btrfs -f -L Venom $partition_var &>/dev/null
 			       PKGKEEP+=" btrfs-progs" ;;
 		esac
 		if [ $? != 0 ]; then
