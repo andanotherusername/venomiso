@@ -1,9 +1,0 @@
-#
-# this file will get sourced by mkiso script
-#
-
-# set the output name
-OUTPUT="venom-base-$(date +"%Y%m%d").iso"
-
-# set extra packages need to include into iso
-EXTRA_PKGS="wpa_supplicant os-prober linux-firmware btrfs-progs reiserfsprogs xfsprogs"

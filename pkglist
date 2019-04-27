@@ -31,7 +31,4 @@ xdg-user-dirs
 network-manager-applet
 os-prober
 blueman
-btrfs-progs
-reiserfsprogs
-xfsprogs
 libreoffice

@@ -7,6 +7,10 @@ HEIGHT=10
 
 VENOMROOT="/tmp/venominstall"
 ROOTSFS="/lib/initramfs/medium/filesystem/root.sfs"
+LISTPKG="/lib/initramfs/medium/filesystem/listpkg"
+
+PKGINISO=$(mktemp /tmp/pkginiso.XXXXXXX)
+PKGSTRIP=$(mktemp /tmp/pkgstrip.XXXXXXX)
 
 EFI_SYSTEM=0
 
@@ -201,7 +205,7 @@ must be created. This partition will be used as 'EFI System Partition' with '/bo
 			xfs "SGI's Journaling Filesystem")
 		[ $? = 0 ] || return
 	else
-		filesystem_var=
+		filesystem_var=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep -w $partition_var | awk '{print $3}')
 	fi
 
 	if [ $EFI_SYSTEM = 1 ]; then
@@ -298,15 +302,17 @@ install_now() {
 	_dialog --yesno "Continue with installation?" $YESNOSIZE
 	
 	# format partition
-	if [ $filesystem_var ]; then
+	if [ "$partformat" = 1 ]; then
 		_dialog --infobox "Formatting partition $partition_var to $filesystem_var" 3 50
 		case $filesystem_var in
-			ext4) mkfs.ext4 -F $partition_var &>/dev/null ;;
-			ext3) mkfs.ext3 -F $partition_var &>/dev/null ;;
-			ext2) mkfs.ext2 -F $partition_var &>/dev/null ;;
-			xfs) mkfs.xfs -f -m crc=0 $partition_var &>/dev/null ;;
-			reiserfs) mkreiserfs -q $partition_var &>/dev/null ;;
-			btrfs) mkfs.btrfs -f $partition_var &>/dev/null ;;
+			ext4|ext3|ext2) mkfs.$filesystem_var -F $partition_var &>/dev/null
+			      PKGKEEP+=" e2fsprogs" ;;
+			xfs) mkfs.xfs -f -m crc=0 $partition_var &>/dev/null
+			       PKGKEEP+=" xfsprogs" ;;
+			reiserfs) mkreiserfs -q $partition_var &>/dev/null
+			       PKGKEEP+=" reiserfsprogs" ;;
+			btrfs) mkfs.btrfs -f $partition_var &>/dev/null
+			       PKGKEEP+=" btrfs-progs" ;;
 		esac
 		if [ $? != 0 ]; then
 			print_error_msg "Failed create '$filesystem_var' filesystem on '$partition_var'"
@@ -317,6 +323,7 @@ install_now() {
 	if [ "$EFI_SYSTEM" = 1 ]; then
 		_dialog --infobox "Formatting partition $efi_var to fat32" 3 50
 		mkfs.vfat -F32 $efi_var &>/dev/null || print_error_msg "Failed create fat32 filesystem on $efi_var"
+		PKGKEEP+=" grub-efi"
 	fi
 	
 	# make swap
@@ -425,11 +432,17 @@ DAEMONS=(${daemon[@]})
 	fi
 	
 	_dialog --infobox "Removing temporary packages..." 3 50
-	run_chroot pkgdel dialog &>/dev/null
-	run_chroot pkgdel squashfs-tools &>/dev/null
+	pkgdeplist $(cat $LISTPKG) $PKGKEEP | awk '{print $2}' >> $PKGSTRIP
+	scratch listinst >> $PKGINISO
+	
+	for i in $(grep -Fxv -f $PKGSTRIP $PKGINISO); do
+		_dialog --infobox "Removing temporary packages ($i)..." 3 50
+		run_chroot pkgdel $i &>/dev/null
+	done
 	
 	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
 	mountpoint -q $VENOMROOT && umount $VENOMROOT
+	rm -f $PKGSTRIP $PKGINISO
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
 	exit 0
 }

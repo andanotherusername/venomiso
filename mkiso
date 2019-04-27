@@ -92,7 +92,6 @@ Options:
   -i <initrd>         use custom initrd
   -k <kernel>         use custom kernel
   -o <name.iso>       output name for iso
-  -c <file.preset>    use preset file
   -h                  show this help msg
   
 Note:
@@ -127,9 +126,6 @@ parseopt() {
 			-o) checkinput $2
 				OUTPUT=$2
 				shift 2;;
-			-c) checkinput $2
-				PRESET=$2
-				shift 2;;
 			-r) REVDEP="1"
 				shift 1;;
 			-P) checkinput $2
@@ -153,7 +149,7 @@ WDIR=/tmp/venomiso
 ISOLINUXDIR=$CWD/isolinux
 DISTRONAME="Venom Linux"
 LABEL=VenomLive
-REQ_PKGS="dialog squashfs-tools grub-efi"
+REQ_PKGS="dialog squashfs-tools grub-efi btrfs-progs reiserfsprogs xfsprogs"
 VENOMSRC=/tmp/venomrootfs
 ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
 
@@ -186,10 +182,6 @@ if [ ! $(type -p isohybrid ) ]; then
 fi
 
 parseopt $@
-
-if [ "$PRESET" ] && [ -f "$PRESET" ]; then
-	. $PRESET
-fi
 
 OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
 PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
@@ -238,7 +230,7 @@ chroot_run scratch sync || die "failed updating ports"
 printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Installing requested packages..."
-chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS -y || die "failed install packages"
+chroot_run scratch install $REQ_PKGS $ADD_PKGS -y || die "failed install packages"
 
 # run revdep
 if [ "$REVDEP" = 1 ]; then
@@ -273,7 +265,7 @@ mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
 		-b 1048576 -comp xz -Xdict-size 100% \
 		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
 		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
-		-e $VENOMSRC/tmp/* || die "failed create squashed filesystem"
+		-e $VENOMSRC/tmp/* 2>/dev/null || die "failed create squashed filesystem"
 		
 printstep "Setup UEFI mode..."
 GRUB_EFI_ARCH="x86_64"
@@ -335,6 +327,11 @@ mkdir -p $WDIR/boot/efiboot/EFI/boot
 cp $WDIR/boot/EFI/$GRUB_EFI_IMG $WDIR/boot/efiboot/EFI/boot
 umount $WDIR/boot/efiboot
 rm -fr $WDIR/boot/efiboot
+
+# save list packages to iso
+for pkg in base linux $ADD_PKGS; do
+	echo "$pkg" >> $WDIR/filesystem/listpkg
+done
 
 printstep "Creating iso ($OUTPUT)..."
 rm -f $OUTPUT

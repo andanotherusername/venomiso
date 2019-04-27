@@ -17,7 +17,7 @@ EXTRA_PKG="$(cat pkglist | grep -v ^#)"                                         
 PKG_DIR="/mnt/data/venom/packages-dev/"   # prebuilt pkg path in host
 SRC_DIR="/mnt/data/venom/sources/"        # source path in host
 
-BUILD_CMD="sudo ./mkiso -r -p $PKG_DIR -s $SRC_DIR" # cmd used by 'mkiso' script
+BUILD_CMD="sudo ./mkiso -p $PKG_DIR -s $SRC_DIR" # cmd used by 'mkiso' script
 
 if [ "$*" ]; then
 	while [ "$1" ]; do

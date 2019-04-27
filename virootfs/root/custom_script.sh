@@ -19,6 +19,33 @@ echo "$USER:$PASSWORD" | chpasswd -c SHA512
 sed 's/#\(en_US\.UTF-8\)/\1/' -i /etc/locales
 genlocales &>/dev/null
 
+# Enable sudo permission by default.
+if [ -f /etc/sudoers ]; then
+    echo "$USER ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+fi
+
+if [ -d /etc/polkit-1 ]; then
+    cat > /etc/polkit-1/rules.d/venom-live.rules <<_EOF
+polkit.addAdminRule(function(action, subject) {
+    return ["unix-group:wheel"];
+});
+polkit.addRule(function(action, subject) {
+    if (subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+_EOF
+fi
+
+mkdir -p /var/lib/lxdm/
+cat > /var/lib/lxdm/lxdm.conf <<_EOF
+[base]
+last_session=__default__
+last_lang=
+_EOF
+
+#sed -i "s/--noclear/--noclear -a $USER/" /etc/inittab
+
 if [ $(type -p startxfce4) ]; then
 	SSN=$(type -p startxfce4)
 elif [ $(type -p mate-session) ]; then
@@ -30,7 +57,9 @@ elif [ $(type -p startkde) ]; then
 fi
 
 if [ -x $(type -p lxdm) ]; then
-	sed "s,# session=/usr/bin/startlxde,session=$SSN," -i /etc/lxdm/lxdm.conf
+	#sed "s,# session=/usr/bin/startlxde,session=$SSN," -i /etc/lxdm/lxdm.conf
+	sed -e "s,.*session.*=.*,session=/usr/bin/startlxde," -i /etc/lxdm/lxdm.conf
+	sed -e "s,.*autologin.*=.*,autologin=$USER," -i /etc/lxdm/lxdm.conf
 	#sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
 elif [ -x $(type -p lightdm) ]; then
 	# autologin user

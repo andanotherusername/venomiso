@@ -15,10 +15,10 @@ if [[ ! $(ping -c 3 google.com 2>/dev/null) ]]; then
 fi
 
 echo -n ":: Updating venom-installer..."
-wget https://raw.githubusercontent.com/emmett1/venomiso/master/virootfs/usr/sbin/venom-installer -qO /usr/sbin/venom-installer
+wget https://raw.githubusercontent.com/venomlinux/venomiso/master/virootfs/usr/sbin/venom-installer -qO /usr/sbin/venom-installer
 
 if [ $? != 0 ]; then
-	echo "ERROR: Failed fetch 'venom-installer' from 'https://raw.githubusercontent.com/emmett1/venomiso/master/virootfs/usr/sbin/venom-installer'."
+	echo "ERROR: Failed fetch 'venom-installer' from 'https://raw.githubusercontent.com/venomlinux/venomiso/master/virootfs/usr/sbin/venom-installer'."
 	exit 1
 fi
 
