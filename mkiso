@@ -307,7 +307,6 @@ else
 fi
 
 menuentry "Boot Venom Linux (UEFI mode)" {
-
     linux /boot/vmlinuz ro quiet
     initrd /boot/initrd
 }
