@@ -57,8 +57,7 @@ elif [ $(type -p startkde) ]; then
 fi
 
 if [ -x $(type -p lxdm) ]; then
-	#sed "s,# session=/usr/bin/startlxde,session=$SSN," -i /etc/lxdm/lxdm.conf
-	sed -e "s,.*session.*=.*,session=/usr/bin/startlxde," -i /etc/lxdm/lxdm.conf
+	sed -e "s,.*session.*=.*,session=$SSN," -i /etc/lxdm/lxdm.conf
 	sed -e "s,.*autologin.*=.*,autologin=$USER," -i /etc/lxdm/lxdm.conf
 	#sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
 elif [ -x $(type -p lightdm) ]; then

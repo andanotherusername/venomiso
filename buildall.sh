@@ -17,7 +17,7 @@ EXTRA_PKG="$(cat pkglist | grep -v ^#)"                     # extra stuff in the
 PKG_DIR="/mnt/data/venom/packages-dev/"                     # prebuilt pkg path in host
 SRC_DIR="/mnt/data/venom/sources/"                          # source path in host
 
-BUILD_CMD="sudo ./mkiso -r -p $PKG_DIR -s $SRC_DIR"            # cmd used by 'mkiso' script
+BUILD_CMD="sudo ./mkiso -r -p $PKG_DIR -s $SRC_DIR"         # cmd used by 'mkiso' script
 
 if [ "$*" ]; then
 	while [ "$1" ]; do
@@ -37,14 +37,14 @@ for i in $EDITION; do
 		echo ":: Skipping venom-$i-$(date +"%Y%m%d").iso"
 	else
 		case $i in
-			base) BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			xorg) BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			mate) BUILD_CMD_FINAL="$BUILD_CMD -P mate mate-extra lxdm $MUST_PKG $XORG_PKG $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			lxde) BUILD_CMD_FINAL="$BUILD_CMD -P lxde lxdm $MUST_PKG $XORG_PKG $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			xfce4) BUILD_CMD_FINAL="$BUILD_CMD -P xfce4 lxdm $MUST_PKG $XORG_PKG $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			*) echo "ERROR: Currently suport edition is base, xorg, mate, lxde, and xfce4"; exit 1 ;;
+			base)  BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			xorg)  BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			mate)  BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG mate mate-extra lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			lxde)  BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG lxde lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			xfce4) BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG xfce4 lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			*)     echo "ERROR: Currently suport flavors is base, xorg, mate, lxde, and xfce4"; exit 1 ;;
 		esac
-		echo ":: Building '$i' edition..."
+		echo ":: Building '$i' flavor..."
 		$BUILD_CMD_FINAL || error=1
 		unset BUILD_CMD_FINAL
 	fi
