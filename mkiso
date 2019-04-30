@@ -181,6 +181,11 @@ if [ ! $(type -p isohybrid ) ]; then
 	exit 1
 fi
 
+if [ ! -d /usr/lib/grub/x86_64-efi/ ]; then
+	printerror "'grub-efi' not installed."
+	exit 1
+fi
+
 parseopt $@
 
 OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
