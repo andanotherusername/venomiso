@@ -192,6 +192,9 @@ chroot_run revdep -r -y || die "failed fix broken packages..."
 #chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
+# remove initrd
+rm -f $VENOMSRC/boot/initrd-*
+
 # generate initrd
 #kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
 #chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
