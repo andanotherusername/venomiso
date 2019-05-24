@@ -54,6 +54,10 @@ elif [ $(type -p startlxde) ]; then
 	SSN=$(type -p startlxde)
 elif [ $(type -p startkde) ]; then
 	SSN=$(type -p startkde)
+elif [ $(type -p jwm) ]; then
+	SSN=$(type -p jwm)
+elif [ $(type -p openbox) ]; then
+	SSN=$(type -p openbox)
 fi
 
 if [ -x $(type -p lxdm) ]; then
@@ -64,11 +68,6 @@ elif [ -x $(type -p lightdm) ]; then
 	# autologin user
 	sed -i "s/#autologin-user=/autologin-user=$USER/" /etc/lightdm/lightdm.conf
 	sed -i "s/#autologin-session=/autologin-session=mate/" /etc/lightdm/lightdm.conf
-
-	# theme and background
-	#sed -i "s:#background=:background=/usr/share/backgrounds/venom1.jpg:" /etc/lightdm/lightdm-gtk-greeter.conf
-	sed -i "s:#theme-name=:theme-name=Arc-Darker:" /etc/lightdm/lightdm-gtk-greeter.conf
-	sed -i "s:#icon-theme-name=:icon-theme-name=Papirus-Dark:" /etc/lightdm/lightdm-gtk-greeter.conf
 fi
 
 sed -i 's/localhost/venomlive/' /etc/rc.conf
