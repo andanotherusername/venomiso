@@ -390,14 +390,17 @@ DAEMONS=(${daemon[@]})
 
 	# fstab
 	echo "# <device> <dir> <type> <options> <dump> <fsck>" > $VENOMROOT/etc/fstab
-	echo "$partition_var / $filesystem_var defaults 1 1" >> $VENOMROOT/etc/fstab
+	rootuuid=$(blkid -o value -s UUID "$partition_var")
+	echo "UUID=$rootuuid / $filesystem_var defaults 1 1" >> $VENOMROOT/etc/fstab
 
 	if [ "$EFI_SYSTEM" = 1 ]; then
-		echo "$efi_var /boot/efi vfat defaults 0 2" >> $VENOMROOT/etc/fstab
+		efiuuid=$(blkid -o value -s UUID "$efi_var")
+		echo "UUID=$efiuuid /boot/efi vfat defaults 0 2" >> $VENOMROOT/etc/fstab
 	fi
 
 	if [ $swap_var != SKIP ]; then
-		echo "$swap_var swap swap pri=1 0 0" >> $VENOMROOT/etc/fstab
+		swapuuid=$(blkid -o value -s UUID "$swap_var")
+		echo "UUID=$swapuuid swap swap pri=1 0 0" >> $VENOMROOT/etc/fstab
 	fi
 	
 	_dialog --infobox "Creating user ($user_var)..." 3 50
