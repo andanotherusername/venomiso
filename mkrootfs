@@ -183,10 +183,10 @@ esac
 mountbind_cache
 printstep "Updating ports..."
 chroot_run scratch sync || die "failed updating ports"
-printstep "Strip down system to base..."
-chroot_run pkgbase linux || die "failed remove packages..."
 printstep "Upgrading scratchpkg..."
 chroot_run scratch upgrade -y --no-backup scratchpkg || die "failed upgrade scratchpkg"
+printstep "Strip down system to base..."
+chroot_run pkgbase || die "failed remove packages..."
 printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Fix broken packages..."
