@@ -374,7 +374,7 @@ install_now() {
 		fi
 	done
 
-	_dialog --infobox "Applying saved settings..." 10 50
+	_dialog --infobox "Applying saved settings..." 3 50
 	# rc.conf
 	echo "#
 # system configuration

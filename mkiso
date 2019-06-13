@@ -238,6 +238,8 @@ printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Installing requested packages..."
 chroot_run scratch install $REQ_PKGS $ADD_PKGS -y || die "failed install packages"
+printstep "Running perlfix script..."
+chroot_run perlfix -r -y || die "failed fixing perl modules"
 
 # run revdep
 if [ "$REVDEP" = 1 ]; then
