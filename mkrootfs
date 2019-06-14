@@ -17,11 +17,11 @@ die() {
 }
 
 printstep() {
-	echo -e "\e[0;36m::\e[0m $@"
+	echo -e "\e[0;36m::\e[0m $*"
 }
 
 printerror() {
-	echo -e "\e[0;31mERROR:\e[0m $@"
+	echo -e "\e[0;31mERROR:\e[0m $*"
 }
 
 chroot_run() {
@@ -135,7 +135,7 @@ CWD=$PWD
 VENOMSRC=/tmp/venomrootfs
 ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
 
-selecteddir="bin dev home lib64 mnt proc run srv tmp var boot etc lib media opt root sbin sys usr"
+selecteddir="bin dev home lib64 mnt proc run srv tmp var boot etc lib opt root sbin sys usr"
 
 parseopt $@
 
@@ -150,7 +150,7 @@ else
 	OUTPUT=venom-$(date +"%Y%m%d").txz
 fi
 
-if [ "$(echo ${OUTPUT##*.})" != "txz" ]; then
+if [ "${OUTPUT##*.}" != "txz" ]; then
 	printerror "output name should be .txz extension"
 	exit 1
 fi
@@ -189,18 +189,14 @@ printstep "Strip down system to base..."
 chroot_run pkgbase || die "failed remove packages..."
 printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
+printstep "Running perlfix script..."
+chroot_run perlfix -r -y || die "failed fixing perl modules"
 printstep "Fix broken packages..."
 chroot_run revdep -r -y || die "failed fix broken packages..."
-#chroot_run scratch install $REQ_PKGS $ADD_PKGS $EXTRA_PKGS --no-confirm || die "failed install packages"
 umountbind_cache
 
 # remove initrd
 rm -f $VENOMSRC/boot/initrd-*
-
-# generate initrd
-#kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-#chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
-#cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd
 
 # make rootfs
 printstep "Creating rootfs ($OUTPUT)"
@@ -209,6 +205,8 @@ pushd $VENOMSRC >/dev/null
 
 tar --exclude="var/cache/scratchpkg/packages/*" \
 	--exclude="var/cache/scratchpkg/sources/*" \
+	--exclude="var/cache/scratchpkg/log/*" \
+	--exclude="var/cache/scratchpkg/work/*" \
 	--exclude="*.spkgnew" \
 	--exclude="tmp/*" \
 	-cvJpf $CWD/$OUTPUT $selecteddir || die "Failed create rootfs image."

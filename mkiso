@@ -18,12 +18,12 @@ die() {
 }
 
 printstep() {
-	echo -e "\e[0;36m::\e[0m $@"
-	echo -en "\033]0;$@\a"
+	echo -e "\e[0;36m::\e[0m $*"
+	echo -en "\033]0;$*\a"
 }
 
 printerror() {
-	echo -e "\e[0;31mERROR:\e[0m $@"
+	echo -e "\e[0;31mERROR:\e[0m $*"
 }
 
 chroot_run() {
@@ -192,7 +192,7 @@ OUTPUT=${OUTPUT:-venom-$(date +"%Y%m%d").iso}
 PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
 SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
 
-if [ "$(echo ${OUTPUT##*.})" != "iso" ]; then
+if [ "${OUTPUT##*.}" != "iso" ]; then
 	printerror "output name should be .iso extension"
 	exit 1
 fi
@@ -236,14 +236,22 @@ printstep "Upgrading scratchpkg..."
 chroot_run scratch upgrade -y --no-backup scratchpkg || die "failed upgrade scratchpkg"
 printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
-printstep "Installing requested packages..."
-chroot_run scratch install $REQ_PKGS $ADD_PKGS -y || die "failed install packages"
+
+printstep "Installing iso extra packages..."
+chroot_run scratch install $ADD_PKGS -y || die "failed install iso extra packages"
 printstep "Running perlfix script..."
 chroot_run perlfix -r -y || die "failed fixing perl modules"
-
-# run revdep
+# run first stage revdep
 if [ "$REVDEP" = 1 ]; then
-	printstep "Check broken packages..."
+	printstep "Check broken packages (1st)..."
+	chroot_run revdep -r -y || die "failed revdep process"
+fi
+
+printstep "Installing required by iso packages..."
+chroot_run scratch install $REQ_PKGS -y || die "failed install required by iso packages"
+# run 2nd stage revdep
+if [ "$REVDEP" = 1 ]; then
+	printstep "Check broken packages (2nd)..."
 	chroot_run revdep -r -y || die "failed revdep process"
 fi
 

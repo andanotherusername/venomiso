@@ -176,7 +176,7 @@ must be created. This partition will be used as 'EFI System Partition' with '/bo
 	fi
 	for p in $(showpartition); do
 		psize=$(fdisk -l | grep -w ^$p | awk '{print $5}')
-		fstype=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep $p | awk '{print $3}')
+		fstype=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep -w ^$p | awk '{print $3}')
 		[ $fstype ] || fstype=none
 		partmenu="$partmenu $p size:$psize,fstype:$fstype"
 	done
