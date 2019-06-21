@@ -1,13 +1,10 @@
 #!/bin/bash
 
-DEFSIZE="10 50 0"
-YESNOSIZE="8 50"
-WIDTH=70
-HEIGHT=10
-
 VENOMROOT="/tmp/venominstall"
 ROOTSFS="/lib/initramfs/medium/filesystem/root.sfs"
 LISTPKG="/lib/initramfs/medium/filesystem/listpkg"
+
+YESNOSIZE="8 50"
 
 PKGINISO=$(mktemp /tmp/pkginiso.XXXXXXX)
 PKGSTRIP=$(mktemp /tmp/pkgstrip.XXXXXXX)
@@ -28,7 +25,6 @@ print_msg() {
 }
 
 _exit() {
-	local exits
 	_dialog --yesno "Exit installation?" 8 50
 	if [ $? = 0 ]; then
 		clear
@@ -76,10 +72,10 @@ menu_rootpasswd() {
 		if [ $? != 0 ]; then
 			break
 		fi
-		if [ -z $rootpasswd ]; then
+		if [ -z "$rootpasswd" ]; then
 			_dialog --infobox "Password cant empty, try again!" 3 40
 			sleep 2
-		elif [ $rootpasswd != $rootpasswdc ]; then
+		elif [ "$rootpasswd" != "$rootpasswdc" ]; then
 			_dialog --infobox "Password does not match, try again!" 3 40
 			sleep 2
 		else
@@ -106,10 +102,10 @@ menu_useraccount() {
 			if [ $? != 0 ]; then
 				break
 			fi
-			if [ -z $passwd ]; then
+			if [ -z "$passwd" ]; then
 				_dialog --infobox "Password cant empty, try again!" 3 40
 				sleep 2
-			elif [ $passwd != $passwdc ]; then
+			elif [ "$passwd" != "$passwdc" ]; then
 				_dialog --infobox "Password does not match, try again!" 3 40
 				sleep 2
 			else
@@ -152,6 +148,14 @@ menu_partition() {
 	local s
 	local swapmenu
 
+	partition_var=
+	partformat=
+	filesystem_var=
+	efi_var=
+	format_efi=
+	swap_var=
+	format_swap=
+
 	_dialog --clear --title "  Partitioning Tips  " --msgbox "\n
 For BIOS systems, MBR or GPT partition tables are supported.
 To use GPT partition in BIOS system 1MB partition must be created and set as 'BIOS boot'.\n\n
@@ -169,11 +173,38 @@ must be created. This partition will be used as 'EFI System Partition' with '/bo
 		cfdisk $cfdisk_part
 	fi
 	
-	# select partition to install venom
+	# check if partition is created
 	if [[ ! $(showpartition) ]]; then
 		_dialog --msgbox "No partition found\nPlease create partition first" 7 50
 		return
 	fi
+
+	# EFI partition setup
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		if [[ $(showefi) ]]; then
+			for e in $(showefi); do
+				ssize=$(fdisk -l | grep -w ^$e | awk '{print $5}')
+				efimenu="$efimenu $e $ssize"
+			done
+			efi_var=$(_dialog --menu "Choose EFI partition" 0 50 0 ${efimenu})
+			# check if EFI partition is ok, ask if user want to re-format it, else dont ask, just format it
+			if [ "$(lsblk -nrp -o NAME,SIZE,TYPE,FSTYPE | grep -w $efi_var | grep -w vfat)" ]; then
+				_dialog --yesno "Format EFI partition ($efi_var)?" $YESNOSIZE
+				if [ $? = 0 ]; then
+					format_efi=1
+				else
+					format_efi=
+				fi
+			else
+				format_efi=1
+			fi
+		else
+			_dialog --msgbox "EFI Partition is not set, Please configure partition again!" 6 50
+			return 1
+		fi
+	fi
+
+	# select partition to install venom
 	for p in $(showpartition); do
 		psize=$(fdisk -l | grep -w ^$p | awk '{print $5}')
 		fstype=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep -w ^$p | awk '{print $3}')
@@ -206,16 +237,6 @@ must be created. This partition will be used as 'EFI System Partition' with '/bo
 		[ $? = 0 ] || return
 	else
 		filesystem_var=$(lsblk -nrp -o NAME,TYPE,FSTYPE | grep -w $partition_var | awk '{print $3}')
-	fi
-
-	if [ $EFI_SYSTEM = 1 ]; then
-		if [[ $(showefi) ]]; then
-			for e in $(showefi); do
-				ssize=$(fdisk -l | grep -w ^$e | awk '{print $5}')
-				efimenu="$efimenu $e $ssize"
-			done
-			efi_var=$(_dialog --menu "Choose EFI partition" 0 50 0 ${efimenu})
-		fi
 	fi
 
 	if [[ $(showswap) ]]; then
@@ -273,7 +294,7 @@ User      : $user_var
 UserPswd  : $([ $passwd ] && echo -done-)
 Rootpswd  : $([ $rootpasswd ] && echo -done-)
 Root      : $partition_var $filesystem_var
-EFI       : $([ $EFI_SYSTEM != 1 ] && echo SKIP || echo $efi_var)
+EFI       : $([ $EFI_SYSTEM != 1 ] && echo SKIP || echo $efi_var) $([ $format_efi = 1 ] && echo re-format)
 Swap      : $swap_var $([ $format_swap = 1 ] && echo re-format)
 Grub      : $grub_var
 " 0 0
@@ -293,7 +314,7 @@ install_now() {
 	if [ "$notset" ]; then
 		notset=$(echo $notset | tr ' ' '\n')
 		_dialog --title "  This options is not set  " --msgbox "$notset" 0 0
-		return
+		return 1
 	fi
 	
 	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
@@ -321,18 +342,17 @@ install_now() {
 
 	# make EFI partition
 	if [ "$EFI_SYSTEM" = 1 ]; then
-		_dialog --infobox "Formatting partition $efi_var to fat32" 3 50
-		mkfs.vfat -F32 $efi_var &>/dev/null || print_error_msg "Failed create fat32 filesystem on $efi_var"
+		if [ "$format_efi" = 1 ]; then
+			_dialog --infobox "Formatting partition $efi_var to fat32" 3 50
+			mkfs.vfat -F32 $efi_var &>/dev/null || print_error_msg "Failed create fat32 filesystem on $efi_var"
+		fi
 		PKGKEEP+=" grub-efi"
 	fi
 	
 	# make swap
 	if [ "$format_swap" = 1 ] && [ "$swap_var" ]; then
 		_dialog --infobox "Formatting partition $swap_var to swap" 3 50
-		mkswap $swap_var &>/dev/null
-		if [ $? != 0 ]; then
-			print_error_msg "Failed create 'swap' on '$swap_var'"
-		fi
+		mkswap $swap_var &>/dev/null || print_error_msg "Failed create 'swap' on '$swap_var'"
 	fi
 	
 	rm -fr $VENOMROOT
@@ -349,9 +369,9 @@ install_now() {
 	totalsfs=$(unsquashfs -l $ROOTSFS | wc -l)
 	countsfs=0
 	
-	( unsquashfs -f -i -d $VENOMROOT $ROOTSFS | sed "s:$VENOMROOT::" | while read line; do
-		countsfs=$(( $countsfs + 1 ))
-		echo " $(( 100*$countsfs/$totalsfs ))% $line"
+	( unsquashfs -f -i -d $VENOMROOT $ROOTSFS | sed "s:$VENOMROOT::" | while read -r line; do
+		countsfs=$(( countsfs + 1 ))
+		echo " $(( 100*countsfs/totalsfs ))% $line"
 	done ) | _dialog --progressbox "unsquash filesystem to $partition_var..." 20 70
 	
 	if [ -x $VENOMROOT/etc/rc.d/networkmanager ]; then
@@ -413,16 +433,16 @@ DAEMONS=(${daemon[@]})
 	run_chroot genlocales &>/dev/null
 	
 	_dialog --infobox "Generating initramfs..." 3 50
-	run_chroot mkinitramfs -a -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
+	run_chroot mkinitramfs -a -k $(file /boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
 	
 	_dialog --infobox "Generating initramfs (fallback)..." 3 50
-	run_chroot mkinitramfs -k $(file $VENOMROOTFS/boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom-fallback.img &>/dev/null || print_error_msg "Error generating initramfs"
+	run_chroot mkinitramfs -k $(file /boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom-fallback.img &>/dev/null || print_error_msg "Error generating initramfs"
 
 	if [ "$grub_var" != SKIP ]; then
 		if [ $EFI_SYSTEM = 1 ]; then
 			_dialog --infobox "Installing grub (EFI)..." 3 50
 			run_chroot grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $grub_var &>/dev/null || print_error_msg "Error installing grub"
-			if [ "$(cat /proc/cpuinfo | grep hypervisor)" ]; then
+			if grep -q hypervisor /proc/cpuinfo; then
 				mkdir -p $VENOMROOT/boot/efi/EFI/BOOT
 				cp $VENOMROOT/boot/efi/EFI/venom_grub/grubx64.efi $VENOMROOT/boot/efi/EFI/BOOT/BOOTX64.EFI
 			fi
@@ -515,13 +535,13 @@ Set necessary options before start the installation \n"
 			
 	if [ $? = 0 ]; then
 		case $mainmenu in 
-		 	    Keyboard) menu_keymap      && [ -n $keymap_var ]    && DEFITEM=Partition ;;
-			   Partition) menu_partition   && [ -n $partition_var ] && DEFITEM=Timezone ;;
-			    Timezone) menu_timezone    && [ -n $timezone_var ]  && DEFITEM=Hostname ;;
-			    Hostname) menu_hostname    && [ -n $hostname_var ]  && DEFITEM=UserAccount ;;
-			 UserAccount) menu_useraccount && [ -n $user_var ]      && DEFITEM=RootPassword ;;
-			RootPassword) menu_rootpasswd  && [ -n $rootpasswd ]    && DEFITEM=Bootloader ;;
-			  Bootloader) menu_bootloader  && [ -n $grub_var ]      && DEFITEM=Settings ;;
+		 	    Keyboard) menu_keymap      && [ -n "$keymap_var" ]    && DEFITEM=Partition ;;
+			   Partition) menu_partition   && [ -n "$partition_var" ] && DEFITEM=Timezone ;;
+			    Timezone) menu_timezone    && [ -n "$timezone_var" ]  && DEFITEM=Hostname ;;
+			    Hostname) menu_hostname    && [ -n "$hostname_var" ]  && DEFITEM=UserAccount ;;
+			 UserAccount) menu_useraccount && [ -n "$user_var" ]      && DEFITEM=RootPassword ;;
+			RootPassword) menu_rootpasswd  && [ -n "$rootpasswd" ]    && DEFITEM=Bootloader ;;
+			  Bootloader) menu_bootloader  && [ -n "$grub_var" ]      && DEFITEM=Settings ;;
 			    Settings) view_settings    && DEFITEM=Install ;;
 			     Install) install_now && DEFITEM=Exit ;;
 			        Exit) _exit ;;
