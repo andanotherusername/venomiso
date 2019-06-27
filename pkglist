@@ -1,7 +1,6 @@
 pm-utils
 sudo
 scrot
-gimp
 firefox
 hexchat
 transmission-gtk
@@ -22,13 +21,11 @@ liberation-fonts
 git
 libmtp
 gvfs
-linux-firmware
 networkmanager
 ntfs-3g
 neofetch
 rsync
 xdg-user-dirs
 network-manager-applet
-os-prober
 blueman
 libreoffice

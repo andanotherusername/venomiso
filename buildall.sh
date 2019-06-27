@@ -10,7 +10,7 @@
 # currently support edition is base, xorg, mate, lxde, and xfce4
 #
 
-MUST_PKG="linux wpa_supplicant os-prober linux-firmware grub"    # must have pkg in the iso
+MUST_PKG="linux-firmware linux wpa_supplicant os-prober grub"    # must have pkg in the iso
 XORG_PKG="xorg xorg-video-drivers xf86-input-libinput"           # xorg stuff in the iso
 EXTRA_PKG="$(cat pkglist | grep -v ^#)"                          # extra stuff in the iso, read from 'pkglist' file in current dir
 
