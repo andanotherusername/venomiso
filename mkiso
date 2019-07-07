@@ -239,8 +239,8 @@ chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 
 printstep "Installing iso extra packages..."
 chroot_run scratch install $ADD_PKGS -y || die "failed install iso extra packages"
-printstep "Running perlfix script..."
-chroot_run perlfix -r -y || die "failed fixing perl modules"
+printstep "Running pkgfix script..."
+chroot_run pkgfix -r -y || die "failed fixing broken pkgs"
 # run first stage revdep
 if [ "$REVDEP" = 1 ]; then
 	printstep "Check broken packages (1st)..."
@@ -258,6 +258,16 @@ fi
 # unmount binded cache
 umountbind_cache
 
+# make sfs
+printstep "Squashing root filesystem..."
+mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
+		-b 1048576 -comp xz -Xdict-size 100% \
+		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
+		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
+		-e $VENOMSRC/var/cache/scratchpkg/log/* \
+		-e $VENOMSRC/var/cache/scratchpkg/work/* \
+		-e $VENOMSRC/tmp/* 2>/dev/null || die "failed create squashed filesystem"
+
 # copy kernel
 printstep "Preparing kernel for iso..."
 if [ $KERNEL_FILE ]; then
@@ -271,18 +281,11 @@ printstep "Preparing initrd for iso..."
 if [ $INITRD_FILE ]; then
 	cp $INITRD_FILE $WDIR/boot/initrd || die "failed copying initrd"
 else
+	cp $CWD/initramfs/venomiso.hook $VENOMSRC/etc/mkinitramfs.d || die "failed copying venomiso.hook"
 	kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-	chroot_run mkinitramfs -q -k $kernver -o /boot/initrd-venom.img || die "failed create initramfs"
+	chroot_run mkinitramfs -k $kernver -a venomiso -o /boot/initrd-venom.img || die "failed create initramfs"
 	cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
 fi
-
-# make sfs
-printstep "Squashing root filesystem..."
-mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
-		-b 1048576 -comp xz -Xdict-size 100% \
-		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
-		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
-		-e $VENOMSRC/tmp/* 2>/dev/null || die "failed create squashed filesystem"
 		
 printstep "Setup UEFI mode..."
 GRUB_EFI_ARCH="x86_64"
@@ -330,6 +333,15 @@ menuentry "Boot Venom Linux (UEFI mode)" {
 menuentry "Boot Venom Linux (UEFI mode) debug" {
     set background_color=black
     linux /boot/vmlinuz ro verbose
+    initrd /boot/initrd
+}
+menuentry "Boot Venom Linux (UEFI mode) [Ram]" {
+    linux /boot/vmlinuz ro quiet ram
+    initrd /boot/initrd
+}
+menuentry "Boot Venom Linux (UEFI mode) [Ram] debug" {
+    set background_color=black
+    linux /boot/vmlinuz ro verbose ram
     initrd /boot/initrd
 }
 EOF

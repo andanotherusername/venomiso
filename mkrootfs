@@ -190,7 +190,7 @@ chroot_run pkgbase || die "failed remove packages..."
 printstep "Upgrading system..."
 chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Running perlfix script..."
-chroot_run perlfix -r -y || die "failed fixing perl modules"
+chroot_run pkgfix -r -y || die "failed fixing perl modules"
 printstep "Fix broken packages..."
 chroot_run revdep -r -y || die "failed fix broken packages..."
 umountbind_cache
