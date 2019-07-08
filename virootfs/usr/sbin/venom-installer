@@ -1,8 +1,8 @@
 #!/bin/bash
 
 VENOMROOT="/tmp/venominstall"
-ROOTSFS="/lib/initramfs/medium/filesystem/root.sfs"
-LISTPKG="/lib/initramfs/medium/filesystem/listpkg"
+ROOTSFS="/lib/initramfs/medium/venom/venomrootfs.sfs"
+LISTPKG="/lib/initramfs/medium/venom/listpkg"
 
 YESNOSIZE="8 50"
 

@@ -221,7 +221,7 @@ mkdir -p $WDIR
 
 # prepare isolinux in working dir
 printstep "Preparing isolinux..."
-mkdir -p $WDIR/{filesystem,isolinux,boot}
+mkdir -p $WDIR/{venom,isolinux,boot}
 for file in $isolinux_files; do
 	cp $ISOLINUXDIR/$file $WDIR/isolinux
 done
@@ -260,7 +260,7 @@ umountbind_cache
 
 # make sfs
 printstep "Squashing root filesystem..."
-mksquashfs $VENOMSRC $WDIR/filesystem/root.sfs \
+mksquashfs $VENOMSRC $WDIR/venom/venomrootfs.sfs \
 		-b 1048576 -comp xz -Xdict-size 100% \
 		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
 		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
@@ -358,7 +358,7 @@ rm -fr $WDIR/boot/efiboot
 
 # save list packages to iso
 for pkg in base linux $ADD_PKGS; do
-	echo "$pkg" >> $WDIR/filesystem/listpkg
+	echo "$pkg" >> $WDIR/venom/listpkg
 done
 
 printstep "Creating iso ($OUTPUT)..."
