@@ -29,7 +29,7 @@ if [ "$*" ]; then
 		shift
 	done
 else
-	EDITION="rootfs base xorg lxde mate xfce4"
+	EDITION="base xorg lxde mate xfce4"
 fi
 
 for i in $EDITION; do

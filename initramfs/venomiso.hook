@@ -18,7 +18,9 @@ run_earlyhook() {
 		modprobe $mod 2>/dev/null
 	done
 	
-	mount_handler=mount_venomiso
+	if [ -z "$root" ]; then
+		mount_handler=mount_venomiso
+	fi
 }
 
 mount_venomiso() {
@@ -30,6 +32,7 @@ mount_venomiso() {
 	WRITEDIR=/run/initramfs/overlayfs/write
 	WORKDIR=/run/initramfs/overlayfs/work
 	sfsimg=/run/initramfs/medium/venom/venomrootfs.sfs
+	listpkg=/run/initramfs/medium/venom/listpkg
 	
 	mkdir -p $MEDIUM $SYSTEM $WRITEDIR $WORKDIR
 	
@@ -42,7 +45,9 @@ mount_venomiso() {
 		mount -t tmpfs -o "size=75%",mode=0755 ram /run/initramfs/ram || problem
 		msg "copying squashfs img to /run/initramfs/ram..."
 		cp $sfsimg /run/initramfs/ram/ || problem
+		cp $listpkg /run/initramfs/ram/ || problem
 		sfsimg=/run/initramfs/ram/venomrootfs.sfs
+		listpkg=/run/initramfs/ram/listpkg
 	fi
 	sfs_dev=$(losetup --find --show --read-only $sfsimg)
 	msg "mounting squashfs img to $SYSTEM..."

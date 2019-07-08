@@ -1,8 +1,14 @@
 #!/bin/bash
 
 VENOMROOT="/tmp/venominstall"
-ROOTSFS="/lib/initramfs/medium/venom/venomrootfs.sfs"
-LISTPKG="/lib/initramfs/medium/venom/listpkg"
+
+if [ -f "/run/initramfs/ram/venomrootfs.sfs" ]; then
+	ROOTSFS="/run/initramfs/ram/venomrootfs.sfs"
+	LISTPKG="/run/initramfs/ram/listpkg"
+else
+	ROOTSFS="/run/initramfs/medium/venom/venomrootfs.sfs"
+	LISTPKG="/run/initramfs/medium/venom/listpkg"
+fi
 
 YESNOSIZE="8 50"
 
@@ -433,11 +439,8 @@ DAEMONS=(${daemon[@]})
 	run_chroot genlocales &>/dev/null
 	
 	_dialog --infobox "Generating initramfs..." 3 50
-	run_chroot mkinitramfs -m -k $(file /boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
+	run_chroot mkinitramfs -k $(file /boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom.img &>/dev/null || print_error_msg "Error generating initramfs"
 	
-	_dialog --infobox "Generating initramfs (fallback)..." 3 50
-	run_chroot mkinitramfs -k $(file /boot/vmlinuz-venom | cut -d ' ' -f9) -o /boot/initrd-venom-fallback.img &>/dev/null || print_error_msg "Error generating initramfs"
-
 	if [ "$grub_var" != SKIP ]; then
 		if [ $EFI_SYSTEM = 1 ]; then
 			_dialog --infobox "Installing grub (EFI)..." 3 50
@@ -551,12 +554,6 @@ Set necessary options before start the installation \n"
 	fi
 }
 
-debug=0
-
-if [ "$1" = "--debug" ]; then
-	debug=1
-fi
-
 if [ ! $(type -p unsquashfs) ]; then
 	echo "squashfs-tools is not installed, aborted."
 	exit 1
@@ -567,8 +564,13 @@ if [ ! $(type -p dialog) ]; then
 	exit 1
 fi
 
-if [ ! -f $ROOTSFS ] && [ $debug != 1 ]; then
+if [ ! -f "$ROOTSFS" ]; then
 	echo "squashed filesystem '$ROOTSFS' not found!"
+	exit  1
+fi
+
+if [ ! -f "$LISTPKG" ]; then
+	echo "list packages '$LISTPKG' not found!"
 	exit  1
 fi
 
