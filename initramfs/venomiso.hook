@@ -32,7 +32,7 @@ mount_venomiso() {
 	WRITEDIR=/run/initramfs/overlayfs/write
 	WORKDIR=/run/initramfs/overlayfs/work
 	sfsimg=/run/initramfs/medium/venom/venomrootfs.sfs
-	listpkg=/run/initramfs/medium/venom/listpkg
+	listpkg=/run/initramfs/medium/venom/pkglist
 	
 	mkdir -p $MEDIUM $SYSTEM $WRITEDIR $WORKDIR
 	

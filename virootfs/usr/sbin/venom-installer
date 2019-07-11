@@ -4,10 +4,10 @@ VENOMROOT="/tmp/venominstall"
 
 if [ -f "/run/initramfs/ram/venomrootfs.sfs" ]; then
 	ROOTSFS="/run/initramfs/ram/venomrootfs.sfs"
-	LISTPKG="/run/initramfs/ram/listpkg"
+	LISTPKG="/run/initramfs/ram/pkglist"
 else
 	ROOTSFS="/run/initramfs/medium/venom/venomrootfs.sfs"
-	LISTPKG="/run/initramfs/medium/venom/listpkg"
+	LISTPKG="/run/initramfs/medium/venom/pkglist"
 fi
 
 YESNOSIZE="8 50"
@@ -28,6 +28,47 @@ _dialog() {
 
 print_msg() {
 	_dialog --clear --msgbox "$@" 8 60
+}
+
+print_error_msg() {
+	print_msg "$@"
+	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
+	mountpoint -q $VENOMROOT && umount $VENOMROOT
+	exit 1
+}
+
+mount_pseudofs() {
+	mount --bind /dev $VENOMROOT/dev
+	mount -t devpts devpts $VENOMROOT/dev/pts -o gid=5,mode=620
+	mount -t proc proc $VENOMROOT/proc
+	mount -t sysfs sysfs $VENOMROOT/sys
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		mount --bind /sys/firmware/efi/efivars $VENOMROOT/sys/firmware/efi/efivars
+	fi
+	mount -t tmpfs tmpfs $VENOMROOT/run
+	# workaround on stupid 'WARNING: Device /dev/XXXX not initialized in udev database even after waiting 10000000 microseconds.'
+	mkdir -p $VENOMROOT/run/udev
+	mount --bind /run/udev $VENOMROOT/run/udev
+}
+
+umount_pseudofs() {
+	umount $VENOMROOT/dev/pts
+	umount $VENOMROOT/dev
+	umount $VENOMROOT/run/udev
+	umount $VENOMROOT/run
+	umount $VENOMROOT/proc
+	if [ "$EFI_SYSTEM" = 1 ]; then
+		umount $VENOMROOT/sys/firmware/efi/efivars
+	fi
+	umount $VENOMROOT/sys
+}
+
+run_chroot() {
+	mount_pseudofs
+	chroot $VENOMROOT "$@"
+	retval=$?
+	umount_pseudofs
+	return $retval
 }
 
 _exit() {
@@ -459,7 +500,7 @@ DAEMONS=(${daemon[@]})
 	
 	_dialog --infobox "Removing temporary packages..." 3 50
 	pkgdeplist $(cat $LISTPKG) $PKGKEEP | awk '{print $2}' >> $PKGSTRIP
-	scratch listinst >> $PKGINISO
+	scratch listinst | awk '{print $1}' >> $PKGINISO
 	
 	for i in $(grep -Fxv -f $PKGSTRIP $PKGINISO); do
 		_dialog --infobox "Removing temporary packages ($i)..." 3 50
@@ -471,47 +512,6 @@ DAEMONS=(${daemon[@]})
 	rm -f $PKGSTRIP $PKGINISO
 	_dialog --msgbox "Installation done\nYou can reboot now" 7 30
 	exit 0
-}
-
-print_error_msg() {
-	print_msg "$@"
-	mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
-	mountpoint -q $VENOMROOT && umount $VENOMROOT
-	exit 1
-}
-
-mount_pseudofs() {
-	mount --bind /dev $VENOMROOT/dev
-	mount -t devpts devpts $VENOMROOT/dev/pts -o gid=5,mode=620
-	mount -t proc proc $VENOMROOT/proc
-	mount -t sysfs sysfs $VENOMROOT/sys
-	if [ "$EFI_SYSTEM" = 1 ]; then
-		mount --bind /sys/firmware/efi/efivars $VENOMROOT/sys/firmware/efi/efivars
-	fi
-	mount -t tmpfs tmpfs $VENOMROOT/run
-	# workaround on stupid 'WARNING: Device /dev/XXXX not initialized in udev database even after waiting 10000000 microseconds.'
-	mkdir -p $VENOMROOT/run/udev
-	mount --bind /run/udev $VENOMROOT/run/udev
-}
-
-umount_pseudofs() {
-	umount $VENOMROOT/dev/pts
-	umount $VENOMROOT/dev
-	umount $VENOMROOT/run/udev
-	umount $VENOMROOT/run
-	umount $VENOMROOT/proc
-	if [ "$EFI_SYSTEM" = 1 ]; then
-		umount $VENOMROOT/sys/firmware/efi/efivars
-	fi
-	umount $VENOMROOT/sys
-}
-
-run_chroot() {
-	mount_pseudofs
-	chroot $VENOMROOT "$@"
-	retval=$?
-	umount_pseudofs
-	return $retval
 }
 
 menu() {

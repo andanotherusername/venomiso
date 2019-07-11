@@ -19,7 +19,6 @@ die() {
 
 printstep() {
 	echo -e "\e[0;36m::\e[0m $*"
-	echo -en "\033]0;$*\a"
 }
 
 printerror() {
@@ -146,15 +145,11 @@ parseopt() {
 
 CWD=$PWD
 WDIR=/tmp/venomiso
-ISOLINUXDIR=$CWD/isolinux
-DISTRONAME="Venom Linux"
+VENOMSRC=/tmp/venomrootfs
 LABEL=VenomLive
 REQ_PKGS="dialog squashfs-tools grub-efi btrfs-progs reiserfsprogs xfsprogs"
-VENOMSRC=/tmp/venomrootfs
 ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
-
-isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32
-isohdpfx.bin isolinux.cfg libcom32.c32 poweroff.c32 splash.png"
+isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32 libcom32.c32 poweroff.c32"
 
 if [ $UID != 0 ]; then
 	printerror "$(basename $0) need run as root."
@@ -223,9 +218,10 @@ mkdir -p $WDIR
 printstep "Preparing isolinux..."
 mkdir -p $WDIR/{venom,isolinux,boot}
 for file in $isolinux_files; do
-	cp $ISOLINUXDIR/$file $WDIR/isolinux
+	cp /usr/share/syslinux/$file $WDIR/isolinux
 done
-echo "$DISTRONAME" > $WDIR/isolinux/venomlive
+cp isolinux/splash.png $WDIR/isolinux
+cp isolinux/isolinux.cfg $WDIR/isolinux
 [ -d virootfs ] && cp -aR virootfs $WDIR
 
 # install pkgs
@@ -288,9 +284,7 @@ else
 fi
 		
 printstep "Setup UEFI mode..."
-GRUB_EFI_ARCH="x86_64"
-GRUB_EFI_IMG="bootx64.efi"
-mkdir -p $WDIR/boot/{grub/{fonts,${GRUB_EFI_ARCH}-efi},EFI}
+mkdir -p $WDIR/boot/{grub/{fonts,x86_64-efi},EFI}
 if [ -f /usr/share/grub/unicode.pf2 ];then
 	cp /usr/share/grub/unicode.pf2 $WDIR/boot/grub/fonts
 fi
@@ -298,73 +292,29 @@ if [ -f $WDIR/isolinux/splash.png ]; then
 	cp $WDIR/isolinux/splash.png $WDIR/boot/grub/
 fi
 echo "set prefix=/boot/grub" > $WDIR/boot/grub-early.cfg
-cp -a /usr/lib/grub/${GRUB_EFI_ARCH}-efi/*.mod /usr/lib/grub/${GRUB_EFI_ARCH}-efi/*.lst $WDIR/boot/grub/${GRUB_EFI_ARCH}-efi || die "Failed copying efi files"
-cat  > $WDIR/boot/grub/grub.cfg << "EOF"
-set default=0
-set timeout=99
+cp -a /usr/lib/grub/x86_64-efi/*.{mod,lst} $WDIR/boot/grub/x86_64-efi || die "Failed copying efi files"
+cp isolinux/grub.cfg $WDIR/boot/grub/
 
-# set debug=all
-# set pager=1
-
-insmod all_video
-if loadfont /boot/grub/fonts/unicode.pf2; then
-  set gfxmode=800x600
-  insmod efi_gop
-  insmod efi_uga
-  insmod video_bochs
-  insmod video_cirrus
-  insmod gfxterm
-  insmod png
-  terminal_output gfxterm
-fi
-
-if background_image /boot/grub/splash.png; then
-  set color_normal=light-gray/black
-  set color_highlight=white/black
-else
-  set color_normal=cyan/blue
-  set color_highlight=white/blue
-fi
-
-menuentry "Boot Venom Linux (UEFI mode)" {
-    linux /boot/vmlinuz ro quiet
-    initrd /boot/initrd
-}
-menuentry "Boot Venom Linux (UEFI mode) debug" {
-    set background_color=black
-    linux /boot/vmlinuz ro verbose
-    initrd /boot/initrd
-}
-menuentry "Boot Venom Linux (UEFI mode) [Ram]" {
-    linux /boot/vmlinuz ro quiet ram
-    initrd /boot/initrd
-}
-menuentry "Boot Venom Linux (UEFI mode) [Ram] debug" {
-    set background_color=black
-    linux /boot/vmlinuz ro verbose ram
-    initrd /boot/initrd
-}
-EOF
-grub-mkimage -c $WDIR/boot/grub-early.cfg -o $WDIR/boot/EFI/$GRUB_EFI_IMG -O ${GRUB_EFI_ARCH}-efi -p "" iso9660 normal search search_fs_file
+grub-mkimage -c $WDIR/boot/grub-early.cfg -o $WDIR/boot/EFI/bootx64.efi -O x86_64-efi -p "" iso9660 normal search search_fs_file
 modprobe loop
 dd if=/dev/zero of=$WDIR/boot/efiboot.img count=4096
 mkdosfs -n VENOM-UEFI $WDIR/boot/efiboot.img || die "Failed mkdosfs"
 mkdir -p $WDIR/boot/efiboot
 mount -o loop $WDIR/boot/efiboot.img $WDIR/boot/efiboot || die "Failed mount efiboot.img"
 mkdir -p $WDIR/boot/efiboot/EFI/boot
-cp $WDIR/boot/EFI/$GRUB_EFI_IMG $WDIR/boot/efiboot/EFI/boot
+cp $WDIR/boot/EFI/bootx64.efi $WDIR/boot/efiboot/EFI/boot
 umount $WDIR/boot/efiboot
 rm -fr $WDIR/boot/efiboot
 
 # save list packages to iso
-for pkg in base linux $ADD_PKGS; do
-	echo "$pkg" >> $WDIR/venom/listpkg
+for pkg in base $ADD_PKGS; do
+	echo "$pkg" >> $WDIR/venom/pkglist
 done
 
 printstep "Creating iso ($OUTPUT)..."
 rm -f $OUTPUT
 xorriso -as mkisofs \
-    -isohybrid-mbr $CWD/isolinux/isohdpfx.bin \
+    -isohybrid-mbr /usr/share/syslinux/isohdpfx.bin \
     -c isolinux/boot.cat \
     -b isolinux/isolinux.bin \
       -no-emul-boot \
