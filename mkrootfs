@@ -198,6 +198,10 @@ umountbind_cache
 # remove initrd
 rm -f $VENOMSRC/boot/initrd-*
 
+for d in $selecteddir; do
+	[ -d $VENOMSRC/$d ] && incdir+=" $d"
+done
+
 # make rootfs
 printstep "Creating rootfs ($OUTPUT)"
 rm -f $OUTPUT
@@ -209,7 +213,7 @@ tar --exclude="var/cache/scratchpkg/packages/*" \
 	--exclude="var/cache/scratchpkg/work/*" \
 	--exclude="*.spkgnew" \
 	--exclude="tmp/*" \
-	-cvJpf $CWD/$OUTPUT $selecteddir || die "Failed create rootfs image."
+	-cvJpf $CWD/$OUTPUT $incdir || die "Failed create rootfs image."
 
 popd >/dev/null
 		
