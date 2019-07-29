@@ -254,6 +254,8 @@ fi
 # unmount binded cache
 umountbind_cache
 
+rm -f $VENOMSRC/boot/initrd-*
+
 # make sfs
 printstep "Squashing root filesystem..."
 mksquashfs $VENOMSRC $WDIR/venom/venomrootfs.sfs \
@@ -279,7 +281,7 @@ if [ $INITRD_FILE ]; then
 else
 	cp $CWD/initramfs/venomiso.hook $VENOMSRC/etc/mkinitramfs.d || die "failed copying venomiso.hook"
 	kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-	chroot_run mkinitramfs -k $kernver -a venomiso -o /boot/initrd-venom.img || die "failed create initramfs"
+	chroot_run mkinitramfs -k $kernver -a venomiso -s automod -o /boot/initrd-venom.img || die "failed create initramfs"
 	cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
 fi
 		
