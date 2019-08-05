@@ -48,28 +48,37 @@ _EOF
 
 if [ $(type -p startxfce4) ]; then
 	SSN=$(type -p startxfce4)
+	SESSION=xfce
 elif [ $(type -p mate-session) ]; then
 	SSN=$(type -p mate-session)
+	SESSION=mate
 elif [ $(type -p startlxqt) ]; then
 	SSN=$(type -p startlxqt)
+	SESSION=lxqt
 elif [ $(type -p startlxde) ]; then
 	SSN=$(type -p startlxde)
-elif [ $(type -p startkde) ]; then
-	SSN=$(type -p startkde)
+	SESSION=LXDE
 elif [ $(type -p jwm) ]; then
 	SSN=$(type -p jwm)
+	SESSION=jwm
 elif [ $(type -p openbox) ]; then
 	SSN=$(type -p openbox)
+	SESSION=openbox
 fi
 
 if [ -x $(type -p lxdm) ]; then
 	sed -e "s,.*session.*=.*,session=$SSN," -i /etc/lxdm/lxdm.conf
 	sed -e "s,.*autologin.*=.*,autologin=$USER," -i /etc/lxdm/lxdm.conf
-	#sed "s,#bg=/usr/share/backgrounds/default.png,bg=/usr/share/backgrounds/venom1.jpg," -i /etc/lxdm/lxdm.conf
 elif [ -x $(type -p lightdm) ]; then
-	# autologin user
 	sed -i "s/#autologin-user=/autologin-user=$USER/" /etc/lightdm/lightdm.conf
 	sed -i "s/#autologin-session=/autologin-session=mate/" /etc/lightdm/lightdm.conf
+elif [ -x $(type -p sddm) ]; then
+	mkdir -p /etc/sddm.conf.d/
+	cat > /etc/sddm.conf.d/autologin.conf <<_EOF
+[Autologin]
+User=$USER
+Session=$SESSION.desktop
+_EOF
 fi
 
 sed -i 's/localhost/venomlive/' /etc/rc.conf
@@ -79,6 +88,8 @@ if [ -x /etc/rc.d/lxdm ]; then
 	DM=lxdm
 elif [ -x /etc/rc.d/lightdm ]; then
 	DM=lightdm
+elif [ -x /etc/rc.d/sddm ]; then
+	DM=sddm
 fi
 
 if [ -x /etc/rc.d/networkmanager ]; then

@@ -42,7 +42,7 @@ for i in $EDITION; do
 			xorg)   BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
 			mate)   BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG mate mate-extra lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
 			lxde)   BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG lxde lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
-			lxqt)   BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG openbox lxqt lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
+			lxqt)   BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG openbox lxqt oxygen-icons5 sddm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
 			xfce4)  BUILD_CMD_FINAL="$BUILD_CMD -P $MUST_PKG $XORG_PKG xfce4 lxdm $EXTRA_PKG -o venom-$i-$(date +"%Y%m%d").iso";;
 			*)      echo "ERROR: Currently suport flavors is rootfs, base, xorg, mate, lxde, and xfce4"; exit 1 ;;
 		esac
