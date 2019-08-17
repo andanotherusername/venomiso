@@ -33,19 +33,23 @@ mount_venomiso() {
 	WORKDIR=/run/initramfs/overlayfs/work
 	sfsimg=/run/initramfs/medium/venom/venomrootfs.sfs
 	listpkg=/run/initramfs/medium/venom/pkglist
-	delay=${delay:-5}
-	
-	mkdir -p $MEDIUM $SYSTEM $WRITEDIR $WORKDIR
+	wait=${wait:-5}
+	count=0
 	
 	if [ ! -e $MEDIA ]; then
-		msg "wait $delay seconds..."
-		sleep $delay
-		if [ ! -e $MEDIA ]; then
-			msg "media is not appeared even after wait $delay seconds..."
-			msg "try increase delay by append 'delay=<seconds>' to boot cmdline"
-			sleep 9999
-		fi
+		msg "wait for media device..."
+		while [ ! -e $MEDIA ]; do
+			sleep 1
+			count=$((count+1))
+			if [ "$count" -ge "$wait" ]; then
+				msg "media is not appeared even after wait for $wait seconds..."
+				msg "try increase wait time by append 'wait=<seconds>' to boot cmdline"
+				sleep 9999
+			fi
+		done
 	fi
+	
+	mkdir -p $MEDIUM $SYSTEM $WRITEDIR $WORKDIR
 	
 	msg "mounting media to $MEDIUM..."
 	mount -o ro $MEDIA $MEDIUM || problem
