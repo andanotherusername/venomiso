@@ -67,14 +67,7 @@ You can use these options altogether example:
 
     # ./mkiso -p /var/cache/packages -s /var/cache/sources -P xorg xfce4 lxdm -o venom-xfce4-custom.iso
     
-Note: Be careful when adding custom packages, adding non-existing packages may cause build error. Look [here](https://github.com/emmett1/ports) for exist custom packages.
-    
-#### Preset
-
-Preset file is file contain variable that will get source by `mkiso` script to create the iso. Preset file should
-suffix with `.preset`. You can set custom iso name and needed package to include into the iso (more options will
-come soon :D) in the preset file. See existing preset file as example to create your own. Be careful when set the variable, it may interfere
-the mkiso script's variable.
+Note: Be careful when adding custom packages, adding non-existing packages may cause build error. Look [here](https://github.com/venomlinux/ports) for exist custom packages.
 
 ### mkrootfs
 
