@@ -14,9 +14,9 @@ Host:
 
 Venom rootfs (incase you modified it):
 
-* [mkinitramfs](https://github.com/emmett1/mkinitramfs) (to create initrd)
-* [scratchpkg](https://github.com/emmett1/scratchpkg) (to install/upgrade package before create the iso)
-* [rc](https://github.com/emmett1/rc) (init system used by Venom Linux)
+* [mkinitramfs](https://github.com/venomlinux/mkinitramfs) (to create initrd)
+* [scratchpkg](https://github.com/venomlinux/scratchpkg) (to install/upgrade package before create the iso)
+* [rc](https://github.com/venomlinux/rc) (init system used by Venom Linux)
 * squashfs-tools (to unsquash venom filesystem to disk while installing)
 * dialog (required by the installer)
 
@@ -24,7 +24,7 @@ Note: squashfs-tools and dialog will get installed by default before the iso is 
 
 ### mkiso
 
-By default, `mkiso` script will download venom rootfs base image from [here](https://github.com/emmett1/venom/releases)
+By default, `mkiso` script will download venom rootfs base image from [here](https://github.com/venomlinux/venom/releases)
 to create the iso if not found in the current directory (venom-rootfs.txz) but you can use custom venom image tarball or
 venom filesystem directory (in case you need customize it first). Eg: `# ./mkiso mycustomvenom.txz` or `# ./mkiso /path/to/venomfs`.
 
@@ -39,7 +39,6 @@ venom filesystem directory (in case you need customize it first). Eg: `# ./mkiso
       -i <initrd>         use custom initrd
       -k <kernel>         use custom kernel
       -o <name.iso>       output name for iso
-      -c <file.preset>    use preset file
       -h                  show this help msg
       
 #### Example
@@ -55,10 +54,6 @@ Create venom iso with some extra package
 Create venom iso using your own created initrd/kernel (make sure you know what you doing)
 
     # ./mkiso -i /path/to/initrd -k /path/to/kernel
-    
-Create venom iso using preset file
-
-    # ./mkiso -c file.preset
     
 Create venom iso using existing venom rootfs
 
@@ -109,7 +104,7 @@ Create the image tarball using custom packages path (its save you compile time, 
 
 * default password for 'root' is 'root' and default user is 'venom' with password 'venom'.
 * you can change default password and user in 'virootfs/root/custom_script.sh' file.
-* 'virootfs' directory will included into the iso and will copy over to live environment before swith_root.
+* 'virootfs' directory will included into the iso and will copy over to live environment before switch_root.
 * if you need customize the live environment, make change in the 'virootfs' directory, assume 'virootfs' as overlay in live environment.
 * 'virootfs/root/custom_script.sh' script will get execute after get copied over to live environment and before switch_root.
 * if you want customize 'custom_script.sh', keep in mind, '/' in 'custom_script.sh' is '/' in live environment.
