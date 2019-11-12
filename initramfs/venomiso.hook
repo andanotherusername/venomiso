@@ -26,7 +26,7 @@ run_earlyhook() {
 mount_venomiso() {
 	newroot=$1
 		
-	MEDIA=/dev/disk/by-label/VenomLive
+	MEDIA=/dev/disk/by-label/VENOMLIVE
 	MEDIUM=/run/initramfs/medium
 	SYSTEM=/run/initramfs/system
 	WRITEDIR=/run/initramfs/overlayfs/write
