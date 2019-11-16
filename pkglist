@@ -3,11 +3,9 @@ sudo
 scrot
 firefox
 hexchat
-transmission-gtk
 audacious
 audacious-plugins
 smplayer
-vlc
 alsa-utils
 pulseaudio
 jack
@@ -28,4 +26,3 @@ rsync
 xdg-user-dirs
 network-manager-applet
 blueman
-libreoffice
