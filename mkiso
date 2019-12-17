@@ -146,7 +146,7 @@ parseopt() {
 CWD=$PWD
 WDIR=/tmp/venomiso
 VENOMSRC=/tmp/venomrootfs
-LABEL=VENOMLIVE
+ISOLABEL=VENOMLIVE_$(date +"%Y%m%d")
 REQ_PKGS="dialog squashfs-tools grub-efi btrfs-progs reiserfsprogs xfsprogs"
 ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
 isolinux_files="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32 libcom32.c32 poweroff.c32"
@@ -279,9 +279,9 @@ printstep "Preparing initrd for iso..."
 if [ $INITRD_FILE ]; then
 	cp $INITRD_FILE $WDIR/boot/initrd || die "failed copying initrd"
 else
-	cp $CWD/initramfs/venomiso.hook $VENOMSRC/etc/mkinitramfs.d || die "failed copying venomiso.hook"
+	sed "s/@ISOLABEL@/$ISOLABEL/g" $CWD/initramfs/venomiso.hook > $VENOMSRC/etc/mkinitramfs.d/venomiso.hook || die "failed preparing venomiso.hook"
 	kernver=$(file $VENOMSRC/boot/vmlinuz-venom | cut -d ' ' -f9)
-	chroot_run mkinitramfs -k $kernver -a venomiso -o /boot/initrd-venom.img || die "failed create initramfs"
+	chroot_run mkinitramfs -k $kernver -a venomiso || die "failed create initramfs"
 	cp $VENOMSRC/boot/initrd-venom.img $WDIR/boot/initrd || die "failed copying initrd"
 fi
 		
@@ -326,7 +326,7 @@ xorriso -as mkisofs \
     -e boot/efiboot.img \
       -no-emul-boot \
       -isohybrid-gpt-basdat \
-      -volid $LABEL \
+      -volid $ISOLABEL \
     -o $OUTPUT $WDIR || die "failed create iso"
 		
 printstep "Generate md5sum..."
