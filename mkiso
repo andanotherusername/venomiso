@@ -6,7 +6,7 @@ interrupted() {
 
 cleanup() {
 	[ "$cleanvenomsrc" = 1 ] && rm -fr $VENOMSRC
-	rm -fr $WDIR
+	[ "$cleanwdir" = 1 ]     && rm -fr $WDIR
 }
 
 die() {
@@ -43,11 +43,13 @@ mount_pseudofs() {
 }
 
 umount_pseudofs() {
-	umount $VENOMSRC/dev/pts &>/dev/null
-	umount $VENOMSRC/dev &>/dev/null
-	umount $VENOMSRC/run &>/dev/null
-	umount $VENOMSRC/proc &>/dev/null
-	umount $VENOMSRC/sys &>/dev/null
+	set +e
+	mountpoint -q $VENOMSRC/dev/pts && umount $VENOMSRC/dev/pts
+	mountpoint -q $VENOMSRC/dev     && umount $VENOMSRC/dev
+	mountpoint -q $VENOMSRC/run     && umount $VENOMSRC/run
+	mountpoint -q $VENOMSRC/proc    && umount $VENOMSRC/proc
+	mountpoint -q $VENOMSRC/sys     && umount $VENOMSRC/sys
+	set -e
 }
 
 mountbind_cache() {
@@ -59,8 +61,10 @@ mountbind_cache() {
 
 umountbind_cache() {
 	# umount binded cachedir
-	umount $VENOMSRC/var/cache/scratchpkg/sources &>/dev/null
-	umount $VENOMSRC/var/cache/scratchpkg/packages &>/dev/null
+	set +e
+	mountpoint -q $VENOMSRC/var/cache/scratchpkg/sources  && umount $VENOMSRC/var/cache/scratchpkg/sources
+	mountpoint -q $VENOMSRC/var/cache/scratchpkg/packages && umount $VENOMSRC/var/cache/scratchpkg/packages
+	set -e
 }
 
 fetch() {
@@ -144,8 +148,8 @@ parseopt() {
 }
 
 CWD=$PWD
-WDIR=/tmp/venomiso
-VENOMSRC=/tmp/venomrootfs
+WDIR=${WDIR:-/tmp/venomiso}
+VENOMSRC=${VENOMSRC:-/tmp/venomrootfs}
 ISOLABEL=VENOMLIVE_$(date +"%Y%m%d")
 REQ_PKGS="dialog squashfs-tools grub-efi btrfs-progs reiserfsprogs xfsprogs"
 ROOTFSURL="https://sourceforge.net/projects/venomlinux/files/venom-rootfs.txz"
@@ -203,7 +207,9 @@ if [ -z $VENOM ]; then
 fi
 
 case $VENOM in
-	*.txz)	rm -fr $VENOMSRC
+	*.txz)	if [ -d "$VENOMSRC" ]; then
+				die "directory '$VENOMSRC' is exist!"
+			fi
 			mkdir -p $VENOMSRC
 			cleanvenomsrc=1
 			printstep "Extracting $VENOM..."
@@ -211,7 +217,11 @@ case $VENOM in
 	*)		VENOMSRC=$VENOM;;
 esac
 
-rm -fr $WDIR
+if [ -d "$WDIR" ]; then
+	die "directory '$WDIR' is exist!"
+fi
+
+cleanwdir=1
 mkdir -p $WDIR
 
 # prepare isolinux in working dir
