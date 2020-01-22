@@ -63,6 +63,9 @@ mount_venomiso() {
 		cp $listpkg /run/initramfs/ram/ || problem
 		sfsimg=/run/initramfs/ram/venomrootfs.sfs
 		listpkg=/run/initramfs/ram/listpkg
+		if [ -d /run/initramfs/medium/customize ]; then
+			cp -Ra /run/initramfs/medium/customize /run/initramfs/ram/
+		fi
 	fi
 	sfs_dev=$(losetup --find --show --read-only $sfsimg)
 	msg "mounting squashfs img to $SYSTEM..."
@@ -73,8 +76,13 @@ mount_venomiso() {
 	mount -t overlay overlay -o upperdir=$WRITEDIR,lowerdir=$SYSTEM,workdir=$WORKDIR $newroot || problem
 
 	if [ -d $MEDIUM/virootfs/ ]; then
-		msg "copying custom files to $newroot..."
+		msg "copying virootfs files to $newroot..."
 		cp -aR $MEDIUM/virootfs/* $newroot/ || problem
+	fi
+
+	if [ -d $MEDIUM/customize/ ]; then
+		msg "copying customize files to $newroot..."
+		cp -aR $MEDIUM/customize/* $newroot/ || problem
 	fi
 
 	# Tell system to skip fsck during startup

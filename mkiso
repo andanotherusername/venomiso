@@ -233,6 +233,7 @@ done
 cp isolinux/splash.png $WDIR/isolinux
 cp isolinux/isolinux.cfg $WDIR/isolinux
 [ -d virootfs ] && cp -aR virootfs $WDIR
+[ -d customize ] && cp -aR customize $WDIR
 
 # install pkgs
 mountbind_cache
