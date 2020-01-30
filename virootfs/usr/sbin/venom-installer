@@ -1,28 +1,5 @@
 #!/bin/bash
 
-VENOMROOT="/tmp/venominstall"
-
-if [ -f "/run/initramfs/ram/venomrootfs.sfs" ]; then
-	ROOTSFS="/run/initramfs/ram/venomrootfs.sfs"
-	LISTPKG="/run/initramfs/ram/pkglist"
-	CUSTOMDIR="/run/initramfs/ram/customize"
-else
-	ROOTSFS="/run/initramfs/medium/venom/venomrootfs.sfs"
-	LISTPKG="/run/initramfs/medium/venom/pkglist"
-	CUSTOMIZEDIR="/run/initramfs/medium/customize"
-fi
-
-YESNOSIZE="8 50"
-
-PKGINISO=$(mktemp /tmp/pkginiso.XXXXXXX)
-PKGSTRIP=$(mktemp /tmp/pkgstrip.XXXXXXX)
-
-EFI_SYSTEM=0
-
-if [ -e /sys/firmware/efi/systab ]; then
-	EFI_SYSTEM=1
-fi
-
 _dialog() {
 	dialog --no-mouse "$@" 3>&1 1>&2 2>&3
 	return $?
@@ -476,13 +453,13 @@ install_now() {
 				if [ "$vformat" = 1 ]; then
 					print_info "Formatting partition $vdev to $vfs"
 					case $vfs in
-						ext4|ext3|ext2) mkfs.$vfs -F -L Venom $vdev &>/dev/null
+						ext4|ext3|ext2) mkfs.$vfs -F $vdev &>/dev/null
 							  PKGKEEP+=" e2fsprogs" ;;
-						xfs) mkfs.xfs -f -m crc=0 -L Venom $vdev &>/dev/null
+						xfs) mkfs.xfs -f -m crc=0 $vdev &>/dev/null
 							   PKGKEEP+=" xfsprogs" ;;
-						reiserfs) mkreiserfs -q -l Venom $vdev &>/dev/null
+						reiserfs) mkreiserfs -q $vdev &>/dev/null
 							   PKGKEEP+=" reiserfsprogs" ;;
-						btrfs) mkfs.btrfs -f -L Venom $vdev &>/dev/null
+						btrfs) mkfs.btrfs -f $vdev &>/dev/null
 							   PKGKEEP+=" btrfs-progs" ;;
 					esac
 					if [ $? != 0 ]; then
@@ -641,13 +618,13 @@ Set necessary options before start the installation \n"
 			
 	if [ $? = 0 ]; then
 		case $mainmenu in 
-		 	    Keyboard) menu_keymap      && [ "$keymap_var" ]    && DEFITEM=Partition ;;
-			   Partition) menu_partition   && [ "$partition_var" ] && DEFITEM=Timezone ;;
-			    Timezone) menu_timezone    && [ "$timezone_var" ]  && DEFITEM=Hostname ;;
-			    Hostname) menu_hostname    && [ "$hostname_var" ]  && DEFITEM=UserAccount ;;
+		 	    Keyboard) menu_keymap      && [ "$keymap_var" ]    && DEFITEM=Partition    ;;
+			   Partition) menu_partition   && [ "$partition_var" ] && DEFITEM=Timezone     ;;
+			    Timezone) menu_timezone    && [ "$timezone_var" ]  && DEFITEM=Hostname     ;;
+			    Hostname) menu_hostname    && [ "$hostname_var" ]  && DEFITEM=UserAccount  ;;
 			 UserAccount) menu_useraccount && [ "$user_var" ]      && DEFITEM=RootPassword ;;
-			RootPassword) menu_rootpasswd  && [ "$rootpasswd" ]    && DEFITEM=Bootloader ;;
-			  Bootloader) menu_bootloader  && [ "$grub_var" ]      && DEFITEM=Settings ;;
+			RootPassword) menu_rootpasswd  && [ "$rootpasswd" ]    && DEFITEM=Bootloader   ;;
+			  Bootloader) menu_bootloader  && [ "$grub_var" ]      && DEFITEM=Settings     ;;
 			    Settings) view_settings    && DEFITEM=Install ;;
 			     Install) install_now && DEFITEM=Exit ;;
 			        Exit) _exit ;;
@@ -657,24 +634,51 @@ Set necessary options before start the installation \n"
 	fi
 }
 
-if [ ! $(type -p unsquashfs) ]; then
+if [ -f "/run/initramfs/ram/venomrootfs.sfs" ]; then
+	ROOTSFS="/run/initramfs/ram/venomrootfs.sfs"
+	LISTPKG="/run/initramfs/ram/pkglist"
+	CUSTOMDIR="/run/initramfs/ram/customize"
+else
+	ROOTSFS="/run/initramfs/medium/venom/venomrootfs.sfs"
+	LISTPKG="/run/initramfs/medium/venom/pkglist"
+	CUSTOMIZEDIR="/run/initramfs/medium/customize"
+fi
+
+[ "$(id -u)" = 0 ] || {
+	echo "Installing Venom Linux required root!"
+	exit 1
+}
+
+[ $(type -p unsquashfs) ] || {
 	echo "squashfs-tools is not installed, aborted."
 	exit 1
-fi
+}
 
-if [ ! $(type -p dialog) ]; then
+[ $(type -p dialog) ] || {
 	echo "dialog is not installed, aborted."
 	exit 1
-fi
+}
 
-if [ ! -f "$ROOTSFS" ]; then
+[ -f "$ROOTSFS" ] || {
 	echo "squashed filesystem '$ROOTSFS' not found!"
 	exit  1
-fi
+}
 
-if [ ! -f "$LISTPKG" ]; then
+[ -f "$LISTPKG" ] || {
 	echo "list packages '$LISTPKG' not found!"
 	exit  1
+}
+
+VENOMROOT="/tmp/venominstall"
+YESNOSIZE="8 50"
+
+PKGINISO=$(mktemp /tmp/pkginiso.XXXXXXX)
+PKGSTRIP=$(mktemp /tmp/pkgstrip.XXXXXXX)
+
+EFI_SYSTEM=0
+
+if [ -e /sys/firmware/efi/systab ]; then
+	EFI_SYSTEM=1
 fi
 
 while true; do
