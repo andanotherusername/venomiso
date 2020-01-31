@@ -6,4 +6,4 @@ vmlinuz*
 *.txz
 cache*
 *.part
-customization/*
+customize/*

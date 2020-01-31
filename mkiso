@@ -270,10 +270,9 @@ rm -f $VENOMSRC/boot/initrd-*
 # make sfs
 printstep "Squashing root filesystem..."
 mksquashfs $VENOMSRC $WDIR/venom/venomrootfs.sfs \
-		-b 1048576 -comp xz -Xdict-size 100% \
+		-b 1048576 -comp zstd \
 		-e $VENOMSRC/var/cache/scratchpkg/sources/* \
 		-e $VENOMSRC/var/cache/scratchpkg/packages/* \
-		-e $VENOMSRC/var/cache/scratchpkg/log/* \
 		-e $VENOMSRC/var/cache/scratchpkg/work/* \
 		-e $VENOMSRC/tmp/* 2>/dev/null || die "failed create squashed filesystem"
 
