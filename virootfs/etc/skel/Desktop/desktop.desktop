@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Venom Installer
+Comment=
+Exec=/usr/sbin/venom-installer
+Icon=venomlinux
+Terminal=true
+Type=Application
+X-KeepTerminal=true
