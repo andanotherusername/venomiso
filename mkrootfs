@@ -182,27 +182,27 @@ esac
 # install pkgs
 mountbind_cache
 printstep "Updating ports..."
-chroot_run scratch sync || die "failed updating ports"
+xchroot $VENOMSRC scratch sync || die "failed updating ports"
 printstep "Upgrading scratchpkg..."
-chroot_run scratch upgrade -y --no-backup scratchpkg || die "failed upgrade scratchpkg"
+xchroot $VENOMSRC scratch upgrade -y --no-backup scratchpkg || die "failed upgrade scratchpkg"
 printstep "Upgrading scratchpkg-utils..."
-chroot_run scratch upgrade -y --no-backup scratchpkg-utils || die "failed upgrade scratchpkg-utils"
+xchroot $VENOMSRC scratch upgrade -y --no-backup scratchpkg-utils || die "failed upgrade scratchpkg-utils"
 printstep "Strip down system to base..."
-chroot_run pkgbase || die "failed remove packages..."
+xchroot $VENOMSRC pkgbase || die "failed remove packages..."
 printstep "Upgrading system..."
-chroot_run scratch sysup -y --no-backup || die "failed system upgrade"
+xchroot $VENOMSRC scratch sysup -y --no-backup || die "failed system upgrade"
 printstep "Running pkgfix script..."
-chroot_run pkgfix -r -y || die "failed fixing packages"
+xchroot $VENOMSRC pkgfix -r -y || die "failed fixing packages"
 printstep "Fix broken packages..."
-chroot_run revdep -r -y || die "failed fix broken packages..."
+xchroot $VENOMSRC revdep -r -y || die "failed fix broken packages..."
 umountbind_cache
 
 # remove initrd
 rm -f $VENOMSRC/boot/initrd-*
 
-for d in $selecteddir; do
-	[ -d $VENOMSRC/$d ] && incdir+=" $d"
-done
+#for d in $selecteddir; do
+	#[ -d $VENOMSRC/$d ] && incdir+=" $d"
+#done
 
 # make rootfs
 printstep "Creating rootfs ($OUTPUT)"
@@ -215,7 +215,7 @@ tar --exclude="var/cache/scratchpkg/packages/*" \
 	--exclude="var/cache/scratchpkg/work/*" \
 	--exclude="*.spkgnew" \
 	--exclude="tmp/*" \
-	-cvJpf $CWD/$OUTPUT $incdir || die "Failed create rootfs image."
+	-cvJpf $CWD/$OUTPUT * || die "Failed create rootfs image."
 
 popd >/dev/null
 		
