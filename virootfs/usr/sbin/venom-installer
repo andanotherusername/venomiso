@@ -112,7 +112,8 @@ menu_keymap() {
 	for f in ${_keymaps}; do
 		_KEYMAPS="${_KEYMAPS} ${f} -"
 	done
-	keymap_var=$(_dialog --menu "Select your keymap" 0 50 0 ${_KEYMAPS}) || return 1
+	keymap_var=$(_dialog --menu "Select your keymap" 0 50 0 ${_KEYMAPS}) || return 1	
+	return 0
 }
 
 menu_timezone() {
@@ -131,7 +132,8 @@ menu_timezone() {
 	done
 	location=$(_dialog --menu "Select your location" 0 50 0 ${_locations}) || return 1
 
-	timezone_var=$area/$location
+	timezone_var=$area/$location	
+	return 0
 }
 
 menu_hostname() {
@@ -141,7 +143,8 @@ menu_hostname() {
 	else
 		_preset=$hostname_var
 	fi
-	hostname_var=$(_dialog --inputbox "Enter hostname:" 0 50 $_preset) || return 1
+	hostname_var=$(_dialog --inputbox "Enter hostname:" 0 50 $_preset) || return 1	
+	return 0
 }
 
 menu_rootpasswd() {
@@ -163,7 +166,8 @@ menu_rootpasswd() {
 		else
 			break
 		fi
-	done
+	done	
+	return 0
 }
 
 menu_useraccount() {
@@ -196,7 +200,8 @@ menu_useraccount() {
 		done
 	else
 		return
-	fi
+	fi	
+	return 0
 }
 
 setup_efi_partition() {
@@ -218,6 +223,7 @@ setup_efi_partition() {
 		_dialog --msgbox "EFI Partition is not set, Please configure partition again!" 6 50
 		return 1
 	fi
+	return 0
 }
 
 setup_root_partition() {
@@ -228,7 +234,7 @@ setup_root_partition() {
 	for p in $(showpartition); do
 		partmenu="$partmenu $p size:$(get_partition_size $p),fstype:$(get_partition_fstype $p)"
 	done
-	partition_var=$(_dialog --menu "Choose partition to install Venom" 0 60 0 ${partmenu}) || return 1
+	partition_var=$(_dialog --menu "Choose partition for root (/)" 0 60 0 ${partmenu}) || return 1
 
 	if [ "$(get_partition_fstype $partition_var)" != "none" ]; then
 		_dialog --yesno "Do you want to format $partition_var?" $YESNOSIZE && formatrootpartition=1
@@ -241,6 +247,7 @@ setup_root_partition() {
 	else
 		filesystem_var=$(get_partition_fstype $partition_var)
 	fi
+	return 0
 }
 
 setup_swap_partition() {
@@ -265,6 +272,7 @@ setup_swap_partition() {
 	else
 		swap_var=SKIP
 	fi
+	return 0
 }
 
 setup_other_partition() {
@@ -310,11 +318,13 @@ setup_other_partition() {
 		donemountpoint="$donemountpoint $mountpoint"
 		allotherpartitions="$allotherpartitions $otherpart:$mountpoint:$otherpartfs:$otherpartformat"
 	done
-	
-	_dialog --title "   Selected other partitions and mountpoints   " --msgbox "partition:mountpoint:filesystem:format
+
+	[ "$allotherpartitions" ] && _dialog --msgbox "partition:mountpoint:filesystem:format
 
 $(echo $allotherpartitions | tr ' ' '\n')
 " 0 0
+
+	return 0
 }
 
 menu_partition() {
@@ -347,7 +357,8 @@ menu_partition() {
 
 	setup_root_partition || return 1
 	setup_swap_partition || return 1
-	setup_other_partition || return 1
+	setup_other_partition || return 1	
+	return 0
 }
 
 menu_bootloader() {
@@ -363,8 +374,23 @@ menu_bootloader() {
 		grub_var=$(_dialog --menu "Choose disk to install grub" 0 50 0 ${dd}) || return 1
 	else
 		grub_var=SKIP
-	fi
+	fi	
+	return 0
 }
+
+menu_locale() {
+	local locales
+	local _locale
+	locales=$(grep "UTF-8" /etc/locales | awk '{print $1}' | sed 's/^#//;s/\.UTF-8//')
+
+	for l in $locales; do
+		_locale="$_locale $l -"
+	done
+	locale_var=$(_dialog --menu "Select locale" 0 50 0 ${_locale}) || return 1
+	clock_var=$(_dialog --menu "Select time" 0 50 0 UTC - localtime -) || return 1	
+	return 0
+}
+	
 
 view_settings() {
 	_dialog --title "  Saved settings for installation  " --msgbox "
@@ -375,6 +401,8 @@ User      : $user_var
 UserPswd  : $([ $passwd ] && echo -done-)
 Rootpswd  : $([ $rootpasswd ] && echo -done-)
 Root      : $partition_var $filesystem_var
+Locale    : $locale_var
+Time      : $clock_var
 EFI       : $([ $EFI_SYSTEM != 1 ] && echo SKIP || echo $efi_var) $([ $format_efi = 1 ] && echo re-format)
 Swap      : $swap_var $([ $format_swap = 1 ] && echo re-format)
 Grub      : $grub_var
@@ -391,6 +419,7 @@ check_settings() {
 	[ "$user_var" ] || notset="$notset UserAccount"
 	[ "$rootpasswd" ] || notset="$notset RootPassword"
 	[ "$grub_var" ] || notset="$notset Bootloader"
+	[ "$clock_var" ] || notset="$notset Locale"
 	
 	if [ "$notset" ]; then
 		notset=$(echo $notset | tr ' ' '\n')
@@ -406,7 +435,7 @@ install_now() {
 	#mountpoint -q $VENOMROOT/boot/efi && umount $VENOMROOT/boot/efi
 	#mountpoint -q $VENOMROOT && umount $VENOMROOT
 	
-	_dialog --yesno "Continue with installation?" $YESNOSIZE
+	_dialog --yesno "Continue with installation?" $YESNOSIZE || return 1
 	
 	# format root partition
 	if [ "$formatrootpartition" = 1 ]; then
@@ -478,8 +507,7 @@ install_now() {
 		print_info "Mounting '$efi_var'..."
 		mount $efi_var $VENOMROOT/boot/efi || print_error_msg "Error mount '$efi_var'"
 	fi
-		
-	
+
 	totalsfs=$(unsquashfs -l $ROOTSFS | wc -l)
 	countsfs=0
 	
@@ -520,7 +548,7 @@ install_now() {
 
 HOSTNAME=\"$hostname_var\"
 TIMEZONE=\"$timezone_var\"
-CLOCK=\"utc\"
+CLOCK=\"$clock_ver\"
 FONT=\"\"
 KEYMAP=\"$keymap_var\"
 DAEMONS=(${daemon[@]})
@@ -554,8 +582,8 @@ DAEMONS=(${daemon[@]})
 	print_info "Setting root password..."
 	echo "root:$rootpasswd" | chpasswd -R $VENOMROOT -c SHA512 || print_error_msg "Error setting root password"
 	
-	print_info "Generating locales (en_US.UTF-8)..."
-	sed 's/#\(en_US\.UTF-8\)/\1/' -i $VENOMROOT/etc/locales
+	print_info "Generating locales (${locale_var}.UTF-8)..."
+	sed "s/#$locale_var/$locale_var/" -i $VENOMROOT/etc/locales
 	run_chroot genlocales &>/dev/null
 	
 	print_info "Generating initramfs..."
@@ -609,6 +637,7 @@ Set necessary options before start the installation \n"
 			"Partition" "Partition disk" \
 			"Timezone" "Set timezone" \
 			"Hostname" "Set hostname" \
+			"Locale" "Set locale" \
 			"UserAccount" "Set user account" \
 			"RootPassword" "Set root password" \
 			"Bootloader" "Set grub partition" \
@@ -621,7 +650,8 @@ Set necessary options before start the installation \n"
 		 	    Keyboard) menu_keymap      && [ "$keymap_var" ]    && DEFITEM=Partition    ;;
 			   Partition) menu_partition   && [ "$partition_var" ] && DEFITEM=Timezone     ;;
 			    Timezone) menu_timezone    && [ "$timezone_var" ]  && DEFITEM=Hostname     ;;
-			    Hostname) menu_hostname    && [ "$hostname_var" ]  && DEFITEM=UserAccount  ;;
+			    Hostname) menu_hostname    && [ "$hostname_var" ]  && DEFITEM=Locale       ;;
+			      Locale) menu_locale      && [ "$locale_var" ]    && DEFITEM=UserAccount  ;;
 			 UserAccount) menu_useraccount && [ "$user_var" ]      && DEFITEM=RootPassword ;;
 			RootPassword) menu_rootpasswd  && [ "$rootpasswd" ]    && DEFITEM=Bootloader   ;;
 			  Bootloader) menu_bootloader  && [ "$grub_var" ]      && DEFITEM=Settings     ;;
