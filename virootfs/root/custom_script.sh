@@ -82,26 +82,23 @@ _EOF
 fi
 
 sed -i 's/localhost/venomlive/' /etc/rc.conf
-sed -i '/DAEMONS=(/,/)/d' /etc/rc.conf
 
-if [ -x /etc/rc.d/lxdm ]; then
+if [ -f /etc/rc.d/lxdm ]; then
 	DM=lxdm
-elif [ -x /etc/rc.d/lightdm ]; then
+elif [ -f /etc/rc.d/lightdm ]; then
 	DM=lightdm
-elif [ -x /etc/rc.d/sddm ]; then
+elif [ -f /etc/rc.d/sddm ]; then
 	DM=sddm
 fi
 
-if [ -x /etc/rc.d/networkmanager ]; then
+if [ -f /etc/rc.d/networkmanager ]; then
 	NETWORK=networkmanager
-elif [ -x /etc/rc.d/network ]; then
+elif [ -f /etc/rc.d/network ]; then
 	NETWORK=network
 fi
 
 for i in sysklogd dbus $DM $NETWORK bluetooth; do
-	if [ -x /etc/rc.d/$i ]; then
-		daemon+=($i)
+	if [ -f /etc/rc.d/$i ]; then
+		svboots add $i
 	fi
 done
-
-echo "DAEMONS=(${daemon[@]})" >> /etc/rc.conf
