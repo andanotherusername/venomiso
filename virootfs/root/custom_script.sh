@@ -98,7 +98,7 @@ elif [ -f /etc/rc.d/network ]; then
 fi
 
 for i in sysklogd dbus $DM $NETWORK bluetooth; do
-	if [ -f /etc/rc.d/$i ]; then
-		svboots add $i
+	if [ -f /etc/rc.d/$i ] && [ ! -f /var/lib/svboots/$i.boot ]; then
+		svboots add $i >/dev/null
 	fi
 done

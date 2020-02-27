@@ -520,22 +520,24 @@ install_now() {
 		cp -Ra "$CUSTOMIZEDIR"/* $VENOMROOT
 	fi
 	
-	if [ -x $VENOMROOT/etc/rc.d/networkmanager ]; then
+	if [ -f $VENOMROOT/etc/rc.d/networkmanager ]; then
 		network=networkmanager
-	elif [ -x $VENOMROOT/etc/rc.d/network ]; then
+	elif [ -f $VENOMROOT/etc/rc.d/network ]; then
 		network=network
 	fi
 	
-	if [ -x $VENOMROOT/etc/rc.d/lxdm ]; then
+	if [ -f $VENOMROOT/etc/rc.d/lxdm ]; then
 		dm=lxdm
-	elif [ -x $VENOMROOT/etc/rc.d/lightdm ]; then
+	elif [ -f $VENOMROOT/etc/rc.d/lightdm ]; then
 		dm=lightdm
+	elif [ -f $VENOMROOT/etc/rc.d/sddm ]; then
+		dm=sddm
 	fi
 
 	daemons="sysklogd dbus $dm alsa bluetooth gpm $network"
 
 	for d in $daemons; do
-		if [ -f $VENOMROOT/etc/rc.d/$d ]; then
+		if [ -f $VENOMROOT/etc/rc.d/$d ] && [ ! -f $VENOMROOT/var/run/$d.boot ]; then
 			daemon+=($d)
 		fi
 	done
@@ -551,8 +553,13 @@ TIMEZONE=\"$timezone_var\"
 CLOCK=\"$clock_ver\"
 FONT=\"\"
 KEYMAP=\"$keymap_var\"
-DAEMONS=(${daemon[@]})
 " > $VENOMROOT/etc/rc.conf
+
+	# enable services
+	print_info "Enable service..."
+	for s in ${daemon[@]}; do
+		run_chroot svboots add $s >/dev/null
+	done
 
 	# fstab
 	print_info "Setup fstab..."
@@ -605,11 +612,27 @@ DAEMONS=(${daemon[@]})
 		run_chroot grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null || print_error_msg "Error generating grub config"
 	fi
 	
-	print_info "Removing temporary packages..."
+	if [ $(type -p startxfce4) ]; then
+		SSN=$(type -p startxfce4)
+	elif [ $(type -p mate-session) ]; then
+		SSN=$(type -p mate-session)
+	elif [ $(type -p startlxqt) ]; then
+		SSN=$(type -p startlxqt)
+	elif [ $(type -p startlxde) ]; then
+		SSN=$(type -p startlxde)
+	fi
+
+	if [ -x $(type -p lxdm) ] && [ "$SSN" ]; then
+		sed -e "s,.*session.*=.*,session=$SSN," -i $VENOMROOT/etc/lxdm/lxdm.conf
+		#sed -e "s,.*autologin.*=.*,autologin=$USER," -i $VENOMROOT/etc/lxdm/lxdm.conf
+	fi
+	
+	print_info "Resolve temporary packages..."
 	scratch deplist $(cat $LISTPKG) $PKGKEEP | awk '{print $2}' >> $PKGSTRIP
 	pkgquery installed | awk '{print $1}' >> $PKGINISO
 	
 	for i in $(grep -Fxv -f $PKGSTRIP $PKGINISO); do
+		[ "$i" ] || continue
 		print_info "Removing temporary packages ($i)..."
 		run_chroot pkgdel $i &>/dev/null
 	done
