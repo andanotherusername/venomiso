@@ -550,7 +550,7 @@ install_now() {
 
 HOSTNAME=\"$hostname_var\"
 TIMEZONE=\"$timezone_var\"
-CLOCK=\"$clock_ver\"
+CLOCK=\"$clock_var\"
 FONT=\"\"
 KEYMAP=\"$keymap_var\"
 " > $VENOMROOT/etc/rc.conf
@@ -600,10 +600,6 @@ KEYMAP=\"$keymap_var\"
 		if [ "$EFI_SYSTEM" = 1 ]; then
 			print_info "Installing grub (EFI)..."
 			run_chroot grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $grub_var &>/dev/null || print_error_msg "Error installing grub"
-			if grep -q hypervisor /proc/cpuinfo; then
-				mkdir -p $VENOMROOT/boot/efi/EFI/BOOT
-				cp $VENOMROOT/boot/efi/EFI/venom_grub/grubx64.efi $VENOMROOT/boot/efi/EFI/BOOT/BOOTX64.EFI
-			fi
 		else
 			print_info "Installing grub..."
 			run_chroot grub-install $grub_var &>/dev/null || print_error_msg "Error installing grub"
