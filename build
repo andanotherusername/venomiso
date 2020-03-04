@@ -198,7 +198,7 @@ make_iso() {
 usage() {
 	cat << EOF
 Usage:
-  $(basename $0) [options] <venom source>
+  ./$(basename $0) [options] <venom source>
   
 Options:
   -iso                             make iso
@@ -262,14 +262,14 @@ parseopt() {
 }
 
 main() {
-	mkdir -p $WORKDIR $OUTPUTDIR
-	
 	[ $(id -u) = 0 ] || {
 		printerror "$(basename $0) need run as root."
 		exit 1
-	}
+	}	
 
 	trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+	
+	mkdir -p $WORKDIR $OUTPUTDIR
 
 	if [ "${VENOM_SOURCE##*.}" = "txz" ]; then
 		if [ ! -f "$VENOM_SOURCE" ]; then
