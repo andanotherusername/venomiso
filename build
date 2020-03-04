@@ -1,0 +1,328 @@
+#!/bin/bash
+
+interrupted() {
+	die "Abort by user"
+}
+
+cleanup() {
+	for d in run sys dev proc var/cache/scratchpkg/sources var/cache/scratchpkg/packages; do
+		mountpoint -q $ROOTFSDIR/$d && {
+			printerror "Some directories still mounted, skip cleaning"
+			return 0
+		}
+	done
+	[ "$keeprootfsdir" = 1 ] || {		
+		printstep "Remove rootfs dir: $ROOTFSDIR ..."
+		rm -fr $ROOTFSDIR
+	}
+	[ "$keeworkdir" = 1 ] || {		
+		printstep "Remove working dir: $WORKDIR ..."
+		rm -fr $WORKDIR
+	}
+}
+
+die() {
+	[ "$@" ] && printerror $@
+	umount_pseudofs
+	umountbind_cache
+	cleanup
+	exit 1
+}
+
+printstep() {
+	echo -e "\e[0;36m::\e[0m $*"
+}
+
+printerror() {
+	echo -e "\e[0;31m::\e[0m $*"
+}
+
+chroot_run() {
+	mount_pseudofs
+	cp -L /etc/resolv.conf $ROOTFSDIR/etc/
+	chroot $ROOTFSDIR $@
+	retval=$?
+	umount_pseudofs
+	return $retval
+}
+
+mount_pseudofs() {
+	mount --bind /dev $ROOTFSDIR/dev
+	mount -t devpts devpts $ROOTFSDIR/dev/pts -o gid=5,mode=620
+	mount -t proc proc $ROOTFSDIR/proc
+	mount -t sysfs sysfs $ROOTFSDIR/sys
+	mount -t tmpfs tmpfs $ROOTFSDIR/run
+}
+
+umount_pseudofs() {
+	mountpoint -q $ROOTFSDIR/run && umount -l $ROOTFSDIR/run
+	mountpoint -q $ROOTFSDIR/sys && umount -l $ROOTFSDIR/sys
+	mountpoint -q $ROOTFSDIR/proc && umount -l $ROOTFSDIR/proc
+	mountpoint -q $ROOTFSDIR/dev/pts && umount -l $ROOTFSDIR/dev/pts
+	mountpoint -q $ROOTFSDIR/dev && umount -l $ROOTFSDIR/dev
+}
+
+mountbind_cache() {
+	# mount bind cachedir
+	mkdir -p $SRC_CACHE $PKG_CACHE
+	mount --bind $SRC_CACHE $ROOTFSDIR/var/cache/scratchpkg/sources
+	mount --bind $PKG_CACHE $ROOTFSDIR/var/cache/scratchpkg/packages
+}
+
+umountbind_cache() {
+	# umount binded cachedir
+	mountpoint -q $ROOTFSDIR/var/cache/scratchpkg/sources && umount -l $ROOTFSDIR/var/cache/scratchpkg/sources
+	mountpoint -q $ROOTFSDIR/var/cache/scratchpkg/packages && umount -l $ROOTFSDIR/var/cache/scratchpkg/packages
+}
+
+setup_base() {
+	# install pkgs
+	mountbind_cache
+	printstep "Updating ports..."
+	chroot_run scratch sync || die "Failed updating ports"
+	printstep "Upgrading scratchpkg..."
+	chroot_run scratch upgrade -y --no-backup scratchpkg || die "Failed upgrade scratchpkg"
+	printstep "Upgrading scratchpkg-utils..."
+	chroot_run scratch upgrade -y --no-backup scratchpkg-utils || die "Failed upgrade scratchpkg-utils"
+	printstep "Strip down system to base..."
+	chroot_run pkgbase || die "Failed remove packages..."
+	printstep "Upgrading system..."
+	chroot_run scratch sysup -y --no-backup || die "Failed system upgrade"
+	printstep "Installing additional packages..."
+	chroot_run scratch install $ADD_PKGS -y || die "Failed installing additional packages"
+	printstep "Running pkgfix script..."
+	chroot_run pkgfix -r -y || die "Failed fixing packages"
+	printstep "Fix broken packages..."
+	chroot_run revdep -r -y || die "Failed fix broken packages..."
+	[ "$MAKEISO" = 1 ] && {
+		printstep "Installing packages required by iso..."
+		chroot_run scratch install $ISO_PKGS -y || die "Failed installing iso packages"
+		chroot_run revdep -r -y || die "Failed fix broken packages..."
+	}
+	umountbind_cache
+
+	# remove initramfs, will created on installation
+	rm -f $ROOTFSDIR/boot/initrd-*
+}
+
+make_rootfs() {
+	# make rootfs
+	printstep "Creating rootfs: $VENOM_OUTPUT ..."
+	rm -f $OUTPUTDIR/$VENOM_OUTPUT $OUTPUTDIR/$VENOM_OUTPUT.md5
+	pushd $ROOTFSDIR >/dev/null
+
+	tar --exclude="var/cache/scratchpkg/packages/*" \
+		--exclude="var/cache/scratchpkg/sources/*" \
+		--exclude="var/cache/scratchpkg/work/*" \
+		--exclude="*.spkgnew" \
+		--exclude="tmp/*" \
+		-cvJpf $OUTPUTDIR/$VENOM_OUTPUT * || die "Failed create rootfs image"
+
+	popd >/dev/null
+}
+
+make_iso() {
+	# prepare isolinux files
+	printstep "Preparing isolinux: $ISOLINUX_FILES ..."
+	mkdir -p $ISODIR/{venom,isolinux,boot}
+	for file in $ISOLINUX_FILES; do
+		cp /usr/share/syslinux/$file $ISODIR/isolinux
+	done
+	cp $FILESDIR/splash.png $ISODIR/isolinux
+	cp $FILESDIR/isolinux.cfg $ISODIR/isolinux
+	[ -d virootfs ] && cp -aR virootfs $ISODIR
+	[ -d customize ] && cp -aR customize $ISODIR
+	
+	# make sfs
+	printstep "Squashing root filesystem: $ISODIR/venom/venomrootfs.sfs ..."
+	mksquashfs $ROOTFSDIR $ISODIR/venom/venomrootfs.sfs \
+			-b 1048576 -comp zstd \
+			-e $ROOTFSDIR/var/cache/scratchpkg/sources/* \
+			-e $ROOTFSDIR/var/cache/scratchpkg/packages/* \
+			-e $ROOTFSDIR/var/cache/scratchpkg/work/* \
+			-e "*.spkgnew" \
+			-e $ROOTFSDIR/tmp/* 2>/dev/null || die "Failed create sfs root filesystem"
+			
+	cp $ROOTFSDIR/boot/vmlinuz-venom $ISODIR/boot/vmlinuz || die "Failed copying kernel"
+	
+	sed "s/@ISOLABEL@/$ISOLABEL/g" $FILESDIR/venomiso.hook > $ROOTFSDIR/etc/mkinitramfs.d/venomiso.hook || die "Failed preparing venomiso.hook"
+	kernver=$(file $ROOTFSDIR/boot/vmlinuz-venom | cut -d ' ' -f9)
+	chroot_run mkinitramfs -k $kernver -a venomiso || die "Failed create initramfs"
+	cp $ROOTFSDIR/boot/initrd-venom.img $ISODIR/boot/initrd || die "Failed copying initrd"
+	
+	printstep "Setup UEFI mode..."
+	mkdir -p $ISODIR/boot/{grub/{fonts,x86_64-efi},EFI}
+	if [ -f /usr/share/grub/unicode.pf2 ];then
+		cp /usr/share/grub/unicode.pf2 $ISODIR/boot/grub/fonts
+	fi
+	if [ -f $ISODIR/isolinux/splash.png ]; then
+		cp $ISODIR/isolinux/splash.png $ISODIR/boot/grub/
+	fi
+	echo "set prefix=/boot/grub" > $ISODIR/boot/grub-early.cfg
+	cp -a /usr/lib/grub/x86_64-efi/*.{mod,lst} $ISODIR/boot/grub/x86_64-efi || die "Failed copying efi files"
+	cp $FILESDIR/grub.cfg $ISODIR/boot/grub/
+
+	grub-mkimage -c $ISODIR/boot/grub-early.cfg -o $ISODIR/boot/EFI/bootx64.efi -O x86_64-efi -p "" iso9660 normal search search_fs_file
+	modprobe loop
+	dd if=/dev/zero of=$ISODIR/boot/efiboot.img count=4096
+	mkdosfs -n VENOM-UEFI $ISODIR/boot/efiboot.img || die "Failed create mkdosfs image"
+	mkdir -p $ISODIR/boot/efiboot
+	mount -o loop $ISODIR/boot/efiboot.img $ISODIR/boot/efiboot || die "Failed mount efiboot.img"
+	mkdir -p $ISODIR/boot/efiboot/EFI/boot
+	cp $ISODIR/boot/EFI/bootx64.efi $ISODIR/boot/efiboot/EFI/boot
+	umount $ISODIR/boot/efiboot
+	rm -fr $ISODIR/boot/efiboot
+
+	# save list packages to iso
+	for pkg in base $ADD_PKGS; do
+		echo "$pkg" >> $ISODIR/venom/pkglist
+	done
+
+	printstep "Creating iso: $OUTPUTDIR/$VENOM_OUTPUT ..."
+	rm -f $VENOM_OUTPUT $VENOM_OUTPUT.md5
+	xorriso -as mkisofs \
+		-isohybrid-mbr /usr/share/syslinux/isohdpfx.bin \
+		-c isolinux/boot.cat \
+		-b isolinux/isolinux.bin \
+		  -no-emul-boot \
+		  -boot-load-size 4 \
+		  -boot-info-table \
+		-eltorito-alt-boot \
+		-e boot/efiboot.img \
+		  -no-emul-boot \
+		  -isohybrid-gpt-basdat \
+		  -volid $ISOLABEL \
+		-o $OUTPUTDIR/$VENOM_OUTPUT $ISODIR || die "Failed creating iso: $OUTPUTDIR/$VENOM_OUTPUT"
+}
+
+usage() {
+	cat << EOF
+Usage:
+  $(basename $0) [options] <venom source>
+  
+Options:
+  -iso                             make iso
+  -keepworkdir                     keep working directory
+  -pkgdir    <path>                set packages cache directory
+  -srcdir    <path>                set sources cache directory
+  -workdir   <path>                set working directory
+  -outputdir <path>                set output directory
+  -output    <name>                output name for rootfs/iso
+  -pkg       <pkg1 pkg2 pkgN ...>  install extra packages
+  -h | -help                       show this help msg
+  
+Note:
+  'venom source' should be a rootfs directory or rootfs tarball image
+  if not define, it will download prebuilt one
+  
+EOF
+}
+
+checkinput() {
+	if [ -z $1 ] || [[ $1 = -* ]]; then
+		printerror "This option need argument!"
+		exit 2
+	fi
+}
+
+parseopt() {
+	while [ "$1" ]; do
+		case $1 in
+			-iso)
+				MAKEISO=1;;
+			-keepworkdir)
+				keeworkdir=1;;
+			-pkgdir) checkinput $2
+				PKG_CACHE=$2
+				shift;;
+			-srcdir) checkinput $2
+				SRC_CACHE=$2
+				shift;;
+			-output) checkinput $2
+				VENOM_OUTPUT=$2
+				shift;;
+			-workdir) checkinput $2
+				WORKDIR=$2
+				shift;;
+			-pkg) checkinput $2
+				while [ "$2" ]; do
+					case $2 in
+						-*) break ;;
+						*) ADD_PKGS="$ADD_PKGS $2";;
+					esac
+					shift
+				done;;
+			-h|-help)
+				usage; exit 0;;
+			*)
+				VENOM=$1;;
+		esac
+		shift
+	done
+}
+
+main() {
+	mkdir -p $WORKDIR $OUTPUTDIR
+	
+	[ $(id -u) = 0 ] || {
+		printerror "$(basename $0) need run as root."
+		exit 1
+	}
+
+	trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+	if [ "${VENOM_SOURCE##*.}" = "txz" ]; then
+		if [ ! -f "$VENOM_SOURCE" ]; then
+			printerror "rootfs source not found: $VENOM_SOURCE"
+			exit 1
+		else
+			rm -fr $ROOTFSDIR
+			mkdir -p $ROOTFSDIR
+			printstep "Extracting source: $VENOM_SOURCE ..."
+			tar xf $VENOM_SOURCE -C $ROOTFSDIR || die "Failed extracting source: $VENOM_SOURCE"
+		fi
+	else
+		if [ ! -d "$VENOM_SOURCE" ]; then
+			printerror "Source directory not exist: $VENOM_SOURCE"
+			exit 1
+		fi
+		keeprootfsdir=1
+		ROOTFSDIR="$VENOM_SOURCE"
+	fi
+
+	setup_base
+	
+	if [ "$MAKEISO" = 1 ]; then
+		VENOM_OUTPUT=$VENOM_OUTPUT.iso
+		make_iso
+	else
+		VENOM_OUTPUT=$VENOM_OUTPUT.txz
+		make_rootfs
+	fi
+
+	printstep "Generate md5sum: $OUTPUTDIR/$VENOM_OUTPUT.md5 ..."
+	md5sum $OUTPUTDIR/$VENOM_OUTPUT > $OUTPUTDIR/$VENOM_OUTPUT.md5
+
+	cleanup
+}
+
+parseopt $@
+
+CWD=$PWD
+PKG_CACHE=${PKG_CACHE:-$CWD/cache_packages}
+SRC_CACHE=${SRC_CACHE:-$CWD/cache_sources}
+VENOM_OUTPUT=${VENOM_OUTPUT:-venom-$(date +"%Y%m%d")}
+VENOM_SOURCE=${VENOM:-venom-rootfs.txz}
+WORKDIR=${WORKDIR:-$CWD/workdir}
+OUTPUTDIR=${OUTPUTDIR:-$CWD/output}
+ROOTFSDIR=${ROOTFSDIR:-$WORKDIR/rootfs}
+ISODIR=${ISODIR:-$WORKDIR/iso}
+FILESDIR=$CWD/files
+
+ISOLABEL=VENOMLIVE_$(date +"%Y%m%d")
+ISO_PKGS="dialog squashfs-tools grub-efi btrfs-progs reiserfsprogs xfsprogs"
+ISOLINUX_FILES="chain.c32 isolinux.bin ldlinux.c32 libutil.c32 reboot.c32 vesamenu.c32 libcom32.c32 poweroff.c32"
+
+main "$@"
+
+exit 0

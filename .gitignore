@@ -7,3 +7,5 @@ vmlinuz*
 cache*
 *.part
 customize/*
+output/*
+workdir/*
