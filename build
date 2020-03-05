@@ -88,8 +88,10 @@ setup_base() {
 	chroot_run pkgbase || die "Failed remove packages..."
 	printstep "Upgrading system..."
 	chroot_run scratch sysup -y --no-backup || die "Failed system upgrade"
-	printstep "Installing additional packages..."
-	chroot_run scratch install $ADD_PKGS -y || die "Failed installing additional packages"
+	[ "$ADD_PKGS" ] && {
+		printstep "Installing additional packages..."
+		chroot_run scratch install $ADD_PKGS -y || die "Failed installing additional packages"
+	}
 	printstep "Running pkgfix script..."
 	chroot_run pkgfix -r -y || die "Failed fixing packages"
 	printstep "Fix broken packages..."
@@ -97,6 +99,7 @@ setup_base() {
 	[ "$MAKEISO" = 1 ] && {
 		printstep "Installing packages required by iso..."
 		chroot_run scratch install $ISO_PKGS -y || die "Failed installing iso packages"
+		printstep "Fix broken packages (2nd time, for iso required packages)..."
 		chroot_run revdep -r -y || die "Failed fix broken packages..."
 	}
 	umountbind_cache
@@ -170,7 +173,7 @@ make_iso() {
 	mount -o loop $ISODIR/boot/efiboot.img $ISODIR/boot/efiboot || die "Failed mount efiboot.img"
 	mkdir -p $ISODIR/boot/efiboot/EFI/boot
 	cp $ISODIR/boot/EFI/bootx64.efi $ISODIR/boot/efiboot/EFI/boot
-	umount $ISODIR/boot/efiboot
+	umount -l $ISODIR/boot/efiboot
 	rm -fr $ISODIR/boot/efiboot
 
 	# save list packages to iso

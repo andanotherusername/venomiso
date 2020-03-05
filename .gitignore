@@ -4,6 +4,7 @@ vmlinuz*
 *.iso
 *.md5
 *.txz
+*.img
 cache*
 *.part
 customize/*
