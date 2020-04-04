@@ -22,7 +22,6 @@ gvfs
 networkmanager
 ntfs-3g
 neofetch
-rsync
 xdg-user-dirs
 network-manager-applet
 blueman

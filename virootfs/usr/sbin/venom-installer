@@ -15,6 +15,13 @@ _dialog_choose_fs() {
 		xfs "SGI's Journaling Filesystem" || return 1
 }
 
+unmount() {
+	while true; do
+		mountpoint -q $1 || break
+		umount $1 2>/dev/null
+	done
+}
+
 print_msg() {
 	_dialog --clear --msgbox "$@" 8 60
 }
@@ -46,15 +53,15 @@ mount_pseudofs() {
 }
 
 umount_pseudofs() {
-	umount $VENOMROOT/dev/pts
-	umount $VENOMROOT/dev
-	umount $VENOMROOT/run/udev
-	umount $VENOMROOT/run
-	umount $VENOMROOT/proc
+	unmount $VENOMROOT/dev/pts
+	unmount $VENOMROOT/dev
+	unmount $VENOMROOT/run/udev
+	unmount $VENOMROOT/run
+	unmount $VENOMROOT/proc
 	if [ "$EFI_SYSTEM" = 1 ]; then
-		umount $VENOMROOT/sys/firmware/efi/efivars
+		unmount $VENOMROOT/sys/firmware/efi/efivars
 	fi
-	umount $VENOMROOT/sys
+	unmount $VENOMROOT/sys
 }
 
 run_chroot() {
@@ -520,46 +527,44 @@ install_now() {
 		cp -Ra "$CUSTOMIZEDIR"/* $VENOMROOT
 	fi
 	
-	if [ -f $VENOMROOT/etc/rc.d/networkmanager ]; then
+	if [ -d $VENOMROOT/etc/sv/networkmanager ]; then
 		network=networkmanager
-	elif [ -f $VENOMROOT/etc/rc.d/network ]; then
-		network=network
+	elif [ -d $VENOMROOT/etc/sv/dhcpcd ]; then
+		network=dhcpcd
 	fi
 	
-	if [ -f $VENOMROOT/etc/rc.d/lxdm ]; then
+	if [ -d $VENOMROOT/etc/sv/lxdm ]; then
 		dm=lxdm
-	elif [ -f $VENOMROOT/etc/rc.d/lightdm ]; then
+	elif [ -d $VENOMROOT/etc/sv/lightdm ]; then
 		dm=lightdm
-	elif [ -f $VENOMROOT/etc/rc.d/sddm ]; then
+	elif [ -d $VENOMROOT/etc/sv/sddm ]; then
 		dm=sddm
+	elif [ -d $VENOMROOT/etc/sv/slim ]; then
+		dm=slim
 	fi
+
+	print_info "Applying saved settings..."
 
 	daemons="sysklogd dbus $dm alsa bluetooth gpm $network"
 
+	# enable services
 	for d in $daemons; do
-		if [ -f $VENOMROOT/etc/rc.d/$d ] && [ ! -f $VENOMROOT/var/run/$d.boot ]; then
-			daemon+=($d)
+		if [ -d $VENOMROOT/etc/sv/$d ]; then
+			run_chroot ln -s /etc/sv/$d /var/service
 		fi
 	done
-
-	print_info "Applying saved settings..."
-	# rc.conf
-	echo "#
-# system configuration
-#
-
-HOSTNAME=\"$hostname_var\"
-TIMEZONE=\"$timezone_var\"
-CLOCK=\"$clock_var\"
-FONT=\"\"
-KEYMAP=\"$keymap_var\"
-" > $VENOMROOT/etc/rc.conf
-
-	# enable services
-	print_info "Enable service..."
-	for s in ${daemon[@]}; do
-		run_chroot svboots add $s >/dev/null
-	done
+	
+	# hostname
+	echo "$hostname_var" > $VENOMROOT/etc/hostname
+	
+	# hardware clock
+	sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"$clock_var\";" -i $VENOMROOT/etc/runit/runit.conf
+	
+	# timezone
+	sed "s;#TIMEZONE=.*;TIMEZONE=\"$timezone_var\";" -i $VENOMROOT/etc/runit/runit.conf
+	
+	# keymap
+	sed "s;#KEYMAP=.*;KEYMAP=\"$keymap_var\";" -i $VENOMROOT/etc/runit/runit.conf
 
 	# fstab
 	print_info "Setup fstab..."

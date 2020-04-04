@@ -81,24 +81,28 @@ Session=$SESSION.desktop
 _EOF
 fi
 
-sed -i 's/localhost/venomlive/' /etc/rc.conf
+echo venomlive > /etc/hostname
 
-if [ -f /etc/rc.d/lxdm ]; then
+if [ -d /etc/sv/lxdm ]; then
 	DM=lxdm
-elif [ -f /etc/rc.d/lightdm ]; then
+elif [ -d /etc/sv/lightdm ]; then
 	DM=lightdm
-elif [ -f /etc/rc.d/sddm ]; then
+elif [ -d /etc/sv/sddm ]; then
 	DM=sddm
+elif [ -d /etc/sv/slim ]; then
+	DM=slim
 fi
 
-if [ -f /etc/rc.d/networkmanager ]; then
+if [ -d /etc/sv/networkmanager ]; then
 	NETWORK=networkmanager
-elif [ -f /etc/rc.d/network ]; then
-	NETWORK=network
+elif [ -d /etc/sv/dhcpcd ]; then
+	NETWORK=dhcpcd
 fi
 
 for i in sysklogd dbus $DM $NETWORK bluetooth; do
-	if [ -f /etc/rc.d/$i ] && [ ! -f /var/lib/svboots/$i.boot ]; then
-		svboots add $i >/dev/null
+	if [ -d /etc/sv/$i ]; then
+		ln -sf /etc/sv/$i /var/service
 	fi
 done
+
+exit 0
